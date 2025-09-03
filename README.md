@@ -59,7 +59,7 @@ meryl union-sum output RFI301_meryldb R1_RFI301_meryldb R2_RFI301_meryldb R3_RFI
 meryl histogram RFI301_meryldb > RFI301_merylhisto.txt
 ```
 #### 2. Estimate genome size, heterozygosity, and duplication using GenomeScope2
-Upload the Meryl histogram "RFI301_merylhisto.txt" to the online version of [GenomeScope2](https://github.com/tbenavi1/genomescope2.0) to run the model and plot. 
+Upload the Meryl histogram "RFI301_merylhisto.txt" to the online version of [GenomeScope2](http://genomescope.org/genomescope2.0/) to run the model and plot. 
 #### 3. Assemble the genome using Hifiasm and convert gfa output to fasta 
 ```
 hifiasm -o ./RFI301_Hifiasm_v1.asm -t 12 --primary m64086e_230626_160908.hifi_reads.fastq.gz m64086e_230706_190935.hifi_reads.fastq.gz m64190e_230621_195312.hifi_reads.fastq.gz 
