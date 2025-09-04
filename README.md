@@ -20,6 +20,8 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 - [BlobToolKit](https://blobtoolkit.genomehubs.org/)
 - [QUAST](https://github.com/ablab/quast)
 - [MitoHiFi](https://github.com/marcelauliano/MitoHiFi)
+- [RepeatModeler](https://github.com/Dfam-consortium/RepeatModeler)
+- [RepeatMasker](https://github.com/Dfam-consortium/RepeatMasker)
 - [STAR](https://github.com/alexdobin/STAR)
 - [GeMoMa](https://www.jstacs.de/index.php/GeMoMa)
 
@@ -110,31 +112,109 @@ python ${MITOHIFIPATH}/src/findMitoReference.py --species "Ramphocelus flammiger
 echo "The closest related mitogenome is: NC_062466.1 (Diglossa brunneiventris)"
 MITOGENOME='NC_062466.1'
 ```
-- [x] Step 4. Run MitoHifi
+- [x] Step 4. Run MitoHifi 
+> Outputs a final_mitogenome.fasta file 
 ```
 echo "running against ${MITOGENOME} mito using ${READS} without -p 90
 python ${MITOHIFIPATH}/src/mitohifi.py -r ${READS} -f ${MITOGENOME}.fasta -g ${MITOGENOME}.gb -t 12 -d -o 2
 ```
-#### 8. Align reads or contigs to the purged primary assembly using Minimap2 for downstream analyses and to visualize coverage patterns 
+#### 8. Align reads or contigs to the purged primary assembly using Minimap2 for downstream analyses and to visualize coverage patterns
+> used the concatenated reads for minimap2 and then samtools to sort and index the bam file
 ```
+minimap2 -ax asm20 -t 12 RFI301_v1.asm.p_purged.fa RFI301.hifi_reads.fasta.gz | samtools sort -o aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam -T reads.tmp
+
+samtools index aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam
 ```
-#### 9. Visualize mapping quality and coverage using Qualimap 
+#### 9. Visualize mapping quality and coverage using Qualimap
+> aked for 120G of memory but gave it 115G as the max in Java memsize (to prevent java mem errors).  
 ```
+qualimap bamqc -bam aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam -c -sd -nw 400 -hm 3 -outdir Qualimap --java-mem-size=115G
 ```
-#### 10. Perform sequence similarity searches using BLAST against reference databases
+#### 10. Perform sequence similarity searches using BLAST against reference databases for contamination screening
 > This step needs a lot of memory, or it will fail so plan accordingly (>300G)
+> Also, make sure your blastdb is in your PATH variable or you have it available
 ```
+export BLASTDB=/software/blast/2.10.0+/blastdb
+
+blastn -query RFI301_v1.asm.p_purged.fa -db /software/blast/2.10.0+/blastdb/nt -outfmt '6 qseqid staxids bitscore std' -max_target_seqs 1 -max_hsps 1 -num_threads 12 -evalue 1e-25 > RFI301_v1.asm.p_purged.tsv
 ```
 #### 11. Visualize and evaluate genome assembly quality and contamination with BlobToolKit
-> download the dataset and filter out contigs that match to any order other than aves to remove contamination
+> I followed the instructions to install [blobtoolkit](https://blobtoolkit.genomehubs.org/install/) (NOT BLOBTOOLS2)
+- [x] Step 1: create a BlobDir (name at the end of the command)
 ```
+blobtools create --fasta /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.fa RFI301_v1
 ```
+- [x] Step 2: Add coverage (bam file). This command need the bam files to be indexed in .csi format (done with samtools) not .bai format 
+```
+samtools index -c aln_hifi_reads_to_RFI301_v1.asm.p_purged.mtDNA.sorted.bam
+blobtools add --cov /path/to/your/minimap/output/aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam RFI301_v1
+```
+- [x] Step 3: Add BUSCO scores from the purged assembly
+```
+blobtools add --busco /path/to/your/purged/busco/output/full_table.tsv RFI301_v1
+```
+- [x] Step 4: Add Blast Hits 
+```
+blobtools add --hits /path/to/your/blast/output/RFI301_v1.asm.p_purged.tsv RFI301_v1
+```
+- [x] Step 5: Go to the folder with the RFI301_v1 directory and open dataset in BlobToolKit Viewer with:
+```
+blobtools host `pwd`
+```
+> This will print:
+- Starting BlobToolKit API on port #### 
+- Starting BlobToolKit viewer on port #### 
+- Visit http://localhost:#### to use the interactive BlobToolKit Viewer. 
+> Open the viewer and Download the dataset as a .txt file
+
+- [x] Step 5: Filter out contigs that match to any order other than aves to remove contamination. I used seqtk but any method works.
+
 #### 12. Join the Mitochondrial genome assembly to the Primary assembly
-
-### Genome annotation
-
-#### 1.If available map RNAseq reads to purged final assembly with STAR
 ```
+cat RFI301_v1.asm.p_purged.fa ./Mitogenome/final_mitogenome.fasta > /path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
+```
+### Genome annotation
+#### 1.Build a de novo repeat database with RepeatModeler
+```
+# Define paths
+FASTA=/path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
+OUTDIR=/path/to/your/wd/RepeatModeler/01_repeatModeler-denovo-repeat-contig-complete.lib
+mkdir -p $OUTDIR && cd $OUTDIR
+# Build database
+BuildDatabase -name RFI301_v1.asm.p_purged.mtDNA -engine ncbi $FASTA &> BuildDatabase_run1.log
+# Run RepeatModeler
+RepeatModeler -engine ncbi -pa 12 -database RFI301_v1.asm.p_purged.mtDNA &>> RepeatModeler_run1.log
+```
+#### 2.Mask the genome with RepeatMasker
+> First use the Zebra finch repeat database available with the software
+```
+mkdir /path/to/your/wd/RepeatMasker/Tgut
+RepeatMasker -pa 12 -gff -species Taeniopygia -dir /path/to/your/wd/RepeatMasker/Tgut $FASTA
+```
+> Then do a second run on the already masked genome (with zebra finch in the previous step) but now using the De novo generated repeat database 
+```
+mkdir /path/to/your/wd/RepeatMasker/Rfla
+LIB=/path/to/your/wd/RepeatModeler/01_repeatModeler-denovo-repeat-contig-complete.lib/RM_###/consensi.fa.classified
+RepeatMasker -pa 12 -gff -lib $LIB -dir /path/to/your/wd/RepeatMasker/Rfla /path/to/your/wd/RepeatMasker/Tgut/RFI301_v1.asm.p_purged.mtDNA.fa.masked 
+```
+#### 3.If available map RNAseq reads to purged final masked assembly with STAR
+- [x] Step 1: Generate genome indices for the masked assembly
+```
+mkdir /path/to/your/STARdir/RFI301_indices
+STAR --runMode genomeGenerate --genomeDir /path/to/your/STARdir/RFI301_indices --genomeFastaFiles /path/to/your/wd/RepeatMasker/Rflam/RFI301_v1.asm.p_purged.mtDNA.fa.masked.masked --runThreadN 21
+```
+- [x] Step 2: Align RNAseq reads with STAR 
+> Note: Raw RNA-seq reads have already been processed through TrimGalore.
+```
+STAR --runMode alignReads \
+  --genomeDir /path/to/your/STARdir/RFI301_indices \
+  --readFilesIn ${READS_PATH}/RFI301/RFI301_1.trimmed.fq.gz ${READS_PATH}/RFI301/RFI301_2.trimmed.fq.gz \
+  --twopassMode Basic \
+  --outFileNamePrefix /path/to/your/STARdir/RFI301 \
+  --runThreadN 21 \
+  --readFilesCommand zcat \
+  --outSAMstrandField intronMotif \
+  --outSAMtype BAM SortedByCoordinate
 ```
 #### 2.Used the mapped reads and available annotations for closely related species for homology based genome annotation with GeMoMa
 ```
