@@ -126,13 +126,12 @@ minimap2 -ax asm20 -t 12 RFI301_v1.asm.p_purged.fa RFI301.hifi_reads.fasta.gz | 
 samtools index aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam
 ```
 #### 9. Visualize mapping quality and coverage using Qualimap
-> aked for 120G of memory but gave it 115G as the max in Java memsize (to prevent java mem errors).  
+> Allocated 120G of memory but used 115G as the max in Java memsize (to prevent java mem errors).  
 ```
 qualimap bamqc -bam aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam -c -sd -nw 400 -hm 3 -outdir Qualimap --java-mem-size=115G
 ```
 #### 10. Perform sequence similarity searches using BLAST against reference databases for contamination screening
 > This step needs a lot of memory, or it will fail so plan accordingly (>300G)
-> Also, make sure your blastdb is in your PATH variable or you have it available
 ```
 export BLASTDB=/software/blast/2.10.0+/blastdb
 
@@ -167,11 +166,11 @@ blobtools host `pwd`
 - Visit http://localhost:#### to use the interactive BlobToolKit Viewer. 
 > Open the viewer and Download the dataset as a .txt file
 
-- [x] Step 5: Filter out contigs that match to any order other than aves to remove contamination. I used seqtk but any method works.
+- [x] Step 5: Filter out contigs that match to any order other than aves to remove contamination. I used [seqkit](https://bioinf.shenwei.me/seqkit/) but any method works.
 
 #### 12. Join the Mitochondrial genome assembly to the Primary assembly
 ```
-cat RFI301_v1.asm.p_purged.fa ./Mitogenome/final_mitogenome.fasta > /path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
+cat /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.fa /path/to/your/Mitogenome/final_mitogenome.fasta > /path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
 ```
 ### Genome annotation
 #### 1.Build a de novo repeat database with RepeatModeler
