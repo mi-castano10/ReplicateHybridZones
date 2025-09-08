@@ -57,7 +57,7 @@ bowtie2 -p 12 --very-sensitive -x ./GBS_Ramphocelus/TEST/referenceGenome/UROC_Ra
 #I have the minQS default parameter (30 or 20) because I want to see how many SNPs do I get
 #The barcode_ket.txt file has only the individuals I'm interested in. 
 
-./GBS_Ramphocelus/tassel5/run_pipeline.pl -Xms100G -Xmx120G -fork1 -ProductionSNPCallerPluginV2 -db ./GBS_Ramphocelus/TEST/output/GBS_ramphocelus.db -e ApeKI -mnQS 20 -i ./GBS_Ramphocelus/TEST/fastq/ -k ./GBS_Ramphocelus/TEST/key/barcode_key.txt -kmerLength 64 -o ./GBS_Ramphocelus/TEST/output/RFLAM_v4_OnlyFlammigerus.vcf -endPlugin -runfork1 >> ./GBS_Ramphocelus/TEST/output/ramphocelus_pipeline.out
+./GBS_Ramphocelus/tassel5/run_pipeline.pl -Xms100G -Xmx120G -fork1 -ProductionSNPCallerPluginV2 -db ./GBS_Ramphocelus/TEST/output/GBS_ramphocelus.db -e ApeKI -mnQS 20 -i ./GBS_Ramphocelus/TEST/fastq/ -k ./GBS_Ramphocelus/TEST/key/barcode_key.txt -kmerLength 64 -o ./GBS_Ramphocelus/TEST/output/RaFlam.v1_AllSamples.vcf -endPlugin -runfork1 >> ./GBS_Ramphocelus/TEST/output/ramphocelus_pipeline.out
 
 #Step 9 - GetTagSequenceFromDBPlugin To extract the Tag sequences
 
