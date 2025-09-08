@@ -246,7 +246,7 @@ outdir=./GeMoMa
 Use the script `Tassel5_GBSv2_Ramphocelus.sh` inside the scripts folder to run the [TASSEL 5](https://www.maizegenetics.net/tassel) GBS pipeline which will demultiplex and map reads, do a quality filter and output a vcf file (This script is commented step by step). 
 #### 2. Filter variants with VCFtools 
 Follow the [Speciation Genomics](https://speciationgenomics.github.io/filtering_vcfs) GitHub to generate statistics from the vcf and decide which quality, depth and missingness filters filters to apply depending on your data. 
-The script `SNP_stats.sh` inside the scripts folder 
+The script `SNP_stats.sh` inside the scripts folder will calculate the statistics for the vcf file according to the tutorial.
 Then do a basic quality/depth filter using VCFtools  
 ```
 vcftools --gzvcf 
