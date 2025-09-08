@@ -243,9 +243,10 @@ outdir=./GeMoMa
 ---
 ## Demultiplexing and mapping reads, calling variants and filtering
 #### 1. Read demultiplexing, mapping and variant calling. 
-Use the script `TasselV5.sh` inside the scripts folder to run the [TASSEL 5](https://www.maizegenetics.net/tassel) GBS pipeline which will demultiplex and map reads, do a quality filter and output a vcf file (This script is commented step by step). 
+Use the script `Tassel5_GBSv2_Ramphocelus.sh` inside the scripts folder to run the [TASSEL 5](https://www.maizegenetics.net/tassel) GBS pipeline which will demultiplex and map reads, do a quality filter and output a vcf file (This script is commented step by step). 
 #### 2. Filter variants with VCFtools 
 Follow the [Speciation Genomics](https://speciationgenomics.github.io/filtering_vcfs) GitHub to generate statistics from the vcf and decide which quality, depth and missingness filters filters to apply depending on your data. 
+The script `SNP_stats.sh` inside the scripts folder 
 Then do a basic quality/depth filter using VCFtools  
 ```
 vcftools --gzvcf 
@@ -269,7 +270,6 @@ vcftools --gzvcf ()
 ```
 ---
 ## Population genetics analysis 
-#### 1. 
 #### 1. Convert file to PLINK and run PCA 
 #### 2. ADMIXTURE
 #### 3. EEMS
