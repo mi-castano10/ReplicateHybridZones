@@ -20,10 +20,12 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 - [BlobToolKit](https://blobtoolkit.genomehubs.org/)
 - [QUAST](https://github.com/ablab/quast)
 - [MitoHiFi](https://github.com/marcelauliano/MitoHiFi)
+- [Medusa](https://github.com/combogenomics/medusa)
 - [RepeatModeler](https://github.com/Dfam-consortium/RepeatModeler)
 - [RepeatMasker](https://github.com/Dfam-consortium/RepeatMasker)
 - [STAR](https://github.com/alexdobin/STAR)
 - [GeMoMa](https://www.jstacs.de/index.php/GeMoMa)
+
 
 ### Demultiplexing, mapping, calling variants and filtering
 
@@ -168,21 +170,27 @@ blobtools host `pwd`
 
 - [x] Step 5: Filter out contigs that match to any order other than aves to remove contamination. I used [seqkit](https://bioinf.shenwei.me/seqkit/) but any method works.
 
+#### 12. Use [Medusa](https://github.com/combogenomics/medusa) to Scaffold the purged and contamination screened primary contigs into chromosomes based on synteny with *T. guttata* and *D. brunneiventris* 
+```
+conda activate medusa_env
+
+./medusa_env/bin/python ./medusa_env/medusa2/medusa2standalone/scripts/medusa.py -f ./path/to/folder/with/Tguttata/assembly -f ./path/to/folder/with/DigBru/assembly -i /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.fasta -o Scaffolded_Tgut_Dibru
+```
 #### 12. Join the Mitochondrial genome assembly to the Primary assembly
 ```
-cat /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.fa /path/to/your/Mitogenome/final_mitogenome.fasta > /path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
+cat /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.scaffolded.fa /path/to/your/Mitogenome/final_mitogenome.fasta > /path/to/your/final/assembly/UROC_RaFlam.v1_Scaffolded.fasta.gz
 ```
 ### Genome annotation
 #### 1.Build a de novo repeat database with RepeatModeler
 ```
 # Define paths
-FASTA=/path/to/your/final/assembly/RFI301_v1.asm.p_purged.mtDNA.fa
+FASTA=/path/to/your/final/assembly/UROC_RaFlam.v1_Scaffolded.fasta
 OUTDIR=/path/to/your/wd/RepeatModeler/01_repeatModeler-denovo-repeat-contig-complete.lib
 mkdir -p $OUTDIR && cd $OUTDIR
 # Build database
-BuildDatabase -name RFI301_v1.asm.p_purged.mtDNA -engine ncbi $FASTA &> BuildDatabase_run1.log
+BuildDatabase -name UROC_RaFlam.v1_Scaffolded -engine ncbi $FASTA &> BuildDatabase_run1.log
 # Run RepeatModeler
-RepeatModeler -engine ncbi -pa 12 -database RFI301_v1.asm.p_purged.mtDNA &>> RepeatModeler_run1.log
+RepeatModeler -engine ncbi -pa 12 -database UROC_RaFlam.v1_Scaffolded &>> RepeatModeler_run1.log
 ```
 #### 2.Mask the genome with RepeatMasker
 > First use the Zebra finch repeat database available with the software
@@ -194,13 +202,13 @@ RepeatMasker -pa 12 -gff -species Taeniopygia -dir /path/to/your/wd/RepeatMasker
 ```
 mkdir /path/to/your/wd/RepeatMasker/Rfla
 LIB=/path/to/your/wd/RepeatModeler/01_repeatModeler-denovo-repeat-contig-complete.lib/RM_###/consensi.fa.classified
-RepeatMasker -pa 12 -gff -lib $LIB -dir /path/to/your/wd/RepeatMasker/Rfla /path/to/your/wd/RepeatMasker/Tgut/RFI301_v1.asm.p_purged.mtDNA.fa.masked 
+RepeatMasker -pa 12 -gff -lib $LIB -dir /path/to/your/wd/RepeatMasker/Rfla /path/to/your/wd/RepeatMasker/Tgut/UROC_RaFlam.v1_Scaffolded.fasta.masked 
 ```
 #### 3.If available map RNAseq reads to purged final masked assembly with STAR
 - [x] Step 1: Generate genome indices for the masked assembly
 ```
 mkdir /path/to/your/STARdir/RFI301_indices
-STAR --runMode genomeGenerate --genomeDir /path/to/your/STARdir/RFI301_indices --genomeFastaFiles /path/to/your/wd/RepeatMasker/Rflam/RFI301_v1.asm.p_purged.mtDNA.fa.masked.masked --runThreadN 21
+STAR --runMode genomeGenerate --genomeDir /path/to/your/STARdir/RFI301_indices --genomeFastaFiles /path/to/your/wd/RepeatMasker/Rflam/UROC_RaFlam.v1_Scaffolded.fasta.masked.masked --runThreadN 21
 ```
 - [x] Step 2: Align RNAseq reads with STAR 
 > Note: Raw RNA-seq reads have already been processed through TrimGalore.
@@ -215,8 +223,22 @@ STAR --runMode alignReads \
   --outSAMstrandField intronMotif \
   --outSAMtype BAM SortedByCoordinate
 ```
-#### 2.Used the mapped reads and available annotations for closely related species for homology based genome annotation with GeMoMa
+#### 2.Use the mapped RNAseq reads and available gene annotations for *T. guttata* for homology based genome annotation with GeMoMa
 ```
+export PATH=/path/to/GeMoMa/env/GEMOMA/bin:$PATH
+ 
+cd ./Annotation
+ 
+java -Xms5G -Xmx170G -jar /pat/to/GeMoMa/git/GeMoMa-1.9/GeMoMa-1.9.jar CLI GeMoMaPipeline \
+AnnotationFinalizer.r=NO o=true \
+t=/path/to/your/wd/RepeatMasker/Rflam/UROC_RaFlam.v1_Scaffolded.fasta.masked.masked \
+s=own i=Tgut \
+a=./ncbi_dataset/data/GCF_003957565.2/genomic.gff \
+g=./ncbi_dataset/data/GCF_003957565.2/GCF_003957565.2_bTaeGut1.4.pri_genomic.fna \
+r=MAPPED ERE.s=FR_FIRST_STRAND \
+ERE.m=/path/to/your/STARdir/RFI301AlignedSortedByCoord.out.bam \
+threads=16 \
+outdir=./GeMoMa
 ```
 ---
 ## Demultiplexing and mapping reads, calling variants and filtering
@@ -245,7 +267,6 @@ vcftools --gzvcf
 ```
 vcftools --gzvcf ()
 ```
-
 ---
 ## Population genetics analysis 
 #### 1. 
