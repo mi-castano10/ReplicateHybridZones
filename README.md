@@ -247,36 +247,74 @@ Use the script `Tassel5_GBSv2_Ramphocelus.sh` inside the scripts folder to run t
 #### 2. Filter variants with VCFtools 
 Follow the [Speciation Genomics](https://speciationgenomics.github.io/filtering_vcfs) GitHub to generate statistics from the vcf and decide which quality, depth and missingness filters filters to apply depending on your data. 
 The script `SNP_stats.sh` inside the scripts folder will calculate the statistics for the vcf file according to the tutorial.
-Then do a basic quality/depth filter using VCFtools  
+1. Remove all the individuals with low depth (this will also remove the blank).
+> Field 3 in the .idepth file is the depth per individual.  
 ```
-vcftools --gzvcf 
+awk -F'\t' '$3 <= 1.3 {print $1}' 'SNP_Stats.idepth' > LowDepth.txt
+vcftools --vcf RaFlam.v1_AllSamples.vcf --remove LowDepth.txt --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth 
 ```
-Then filter your general dataset into 4 datasets according to the assumptions of the different analysis.
-- [x] Dataset A ()
+2. Filter for site depth (remove very low depth or very high due to paralogs or repetitive content), no indels and only biallelic SNPs - DATASET A
+
 ```
-vcftools --gzvcf 
+vcftools --vcf RaFlam.v1_AllSamples_iDepth.recode.vcf --remove-indels --min-alleles 2 --max-alleles 2 --minDP 4 --min-meanDP 4 --max-meanDP 30 --maxDP 30 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic
 ```
-- [x] Dataset B ()
+3. Filter for missing data (Use this dataset for FST, Introgress, Cline analysis freq) - DATASET B
 ```
-vcftools --gzvcf 
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic.recode.vcf --max-missing 0.75 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75
 ```
-- [x] Dataset C ()
+4. Filter for Minor Allele Frequency
 ```
-vcftools --gzvcf 
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75.recode.vcf --maf 0.05 --recode --recode-INFO-all --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75_maf0.05
 ```
-- [x] Dataset D ()
+5. Thin this dataset to keep 1 SNP per rad loci (LD prunning for: PCA, ADMIXTURE) - DATASET C
 ```
-vcftools --gzvcf ()
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_maf0.05.recode.vcf --recode --recode-INFO-all --thin 100 --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75_maf0.05_Thinned
+```
+##### DEMOGRAPHIC ANALYSIS DATASETS FILTERING - DATASET D
+You want to maximize the number of SNPs that you can keep while allowing almost no missing data. So you'll have to subset individuals with missing data, remove outgroups and birds you aren't going to use and then filter for site missingness. You don't normally filter for maf since rare variants can be very informative about demographic processes.
+Also, demographic analysis with FSC and SNAPP requires data to be unlinked (LD prunned, while popsizeABC requires non-LD prunned data). 
+
+6. Use the file from step 3 (Dataset B) and subset only the populations/birds you are interested in. In my case I only want individuals from the transects and from the sister species.
+```
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75.recode.vcf --keep Transects_Passerini.txt --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp
+```
+7. Filter out individuals with a lot of missing data so that you don't get rid of so many SNPs when filtering for site missingness.
+>First you need to calculate missing data per individual in your new subset file:
+```
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp.recode.vcf --missing-indv --out 3TrRp
+awk -F'\t' '$5 <= 0.3 {print $1}' '3TrRp.imiss' > 3TrRp_MissingData.txt
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp.recode.vcf --keep 3TrRp_MissingData.txt --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70
+```
+8. Filter out all the sites that are not present in 90% of the individuals 
+```
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70.recode.vcf --recode-INFO-all --max-missing 0.9 --recode --out ./popsizeABC/RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90
+```
+9. Filter out the sex chromosomes because they have different demographic histories than autosomes - ZW is haploid in half of the individuals (Use this file for popsizeABC)
+> Subset this file based on the pure individuals that you want for each population (FLAM/ICT SYPM - FLAM/ICT ALLO). This txt files are based on having equal representation of individuals in all transects and individuals with low missing data.
+```
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90.recode.vcf --not-chr W --not-chr Z --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes
+``` 
+10. Remove linked sites - LD prunning or thinning (Use this file for FSC and SNAPP). 
+```
+vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes.recode.vcf --thin 100 --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes_Thinned
 ```
 ---
 ## Population genetics analysis 
-#### 1. Convert file to PLINK and run PCA 
-#### 2. ADMIXTURE
-#### 3. EEMS
-#### 4. Demographic analysis 
-#### 5. Geographic clines
-#### 6. Genomic clines
-#### 7. GWAS
+### 1. Convert file to PLINK and run PCA 
+### 2. ADMIXTURE
+### 3. EEMS
+### 4. Fst - Introgress
+### 5. Environmental data & isoclines
+### 6. Demographic analysis 
+#### PopsizeABC
+ 
+#### Stairwayplot2 
+
+#### FastSIMCOAL2
+
+### 7. Geographic clines
+### 8. Genomic clines
+### 9. GWAS
 
 
 
