@@ -253,50 +253,59 @@ The script `SNP_stats.sh` inside the scripts folder will calculate the statistic
 awk -F'\t' '$3 <= 1.3 {print $1}' 'SNP_Stats.idepth' > LowDepth.txt
 vcftools --vcf RaFlam.v1_AllSamples.vcf --remove LowDepth.txt --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth 
 ```
-2. Filter for site depth (remove very low depth or very high due to paralogs or repetitive content), no indels and only biallelic SNPs - DATASET A
+2. Filter for site depth (remove very low depth or very high due to paralogs or repetitive content), no indels and only biallelic SNPs 
 
 ```
 vcftools --vcf RaFlam.v1_AllSamples_iDepth.recode.vcf --remove-indels --min-alleles 2 --max-alleles 2 --minDP 4 --min-meanDP 4 --max-meanDP 30 --maxDP 30 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic
 ```
-3. Filter for missing data (Use this dataset for FST, Introgress, Cline analysis freq) - DATASET B
+3. Filter for missing data - DATASET A
 ```
 vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic.recode.vcf --max-missing 0.75 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75
 ```
-4. Filter for Minor Allele Frequency
+4. Subset only *R. flammigerus* individuals and apply minor allele count filter to keep only polymorphic sites between subspecies (Use this dataset for FST, Introgress, Cline analysis freq) - DATASET B
+> Further subset this file with just individuals in the three sampling transects (excluding samples from Panama and Ecuador) to calculate per transect FST.
+ ```
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75.recode.vcf --keep Only_Flammigerus.txt --mac 1 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1
 ```
-vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75.recode.vcf --maf 0.05 --recode --recode-INFO-all --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75_maf0.05
+5. Filter for Minor Allele Frequency
 ```
-5. Thin this dataset to keep 1 SNP per rad loci (LD prunning for: PCA, ADMIXTURE) - DATASET C
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --maf 0.05 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05
 ```
-vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_maf0.05.recode.vcf --recode --recode-INFO-all --thin 100 --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75_maf0.05_Thinned
+6. Thin this dataset to keep 1 SNP per rad loci (LD prunning for: PCA, ADMIXTURE, EEMS) - DATASET C
+> Further subset this file with just individuals in the three sampling transects (excluding samples from Panama and Ecuador) to calculate per transect PCA - ADMIXTURE). 
+```
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_maf0.05.recode.vcf --recode --recode-INFO-all --thin 100 --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned
 ```
 ##### DEMOGRAPHIC ANALYSIS DATASETS FILTERING - DATASET D
-You want to maximize the number of SNPs that you can keep while allowing almost no missing data. So you'll have to subset individuals with missing data, remove outgroups and birds you aren't going to use and then filter for site missingness. You don't normally filter for maf since rare variants can be very informative about demographic processes.
-Also, demographic analysis with FSC and SNAPP requires data to be unlinked (LD prunned, while popsizeABC requires non-LD prunned data). 
+You want to maximize the number of SNPs that you can keep while allowing the lowest amount of missing data. Not filtering for maf since rare variants can be very informative about demographic processes.
+> Demographic analysis with FSC requires data to be unlinked (LD prunned, while popsizeABC requires non-LD prunned data). 
 
-6. Use the file from step 3 (Dataset B) and subset only the populations/birds you are interested in. In my case I only want individuals from the transects and from the sister species.
+7. Use the file from step 4 (Dataset B) and subset only the populations/birds from the transects
 ```
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_Miss0.75.recode.vcf --keep Transects_Passerini.txt --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --keep Transects.txt --recode-INFO-all --recode --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T
 ```
 7. Filter out individuals with a lot of missing data so that you don't get rid of so many SNPs when filtering for site missingness.
->First you need to calculate missing data per individual in your new subset file:
+> First you need to calculate missing data per individual in your new subset file:
 ```
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp.recode.vcf --missing-indv --out 3TrRp
-awk -F'\t' '$5 <= 0.3 {print $1}' '3TrRp.imiss' > 3TrRp_MissingData.txt
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp.recode.vcf --keep 3TrRp_MissingData.txt --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T.recode.vcf --missing-indv --out 3T
+awk -F'\t' '$5 <= 0.3 {print $1}' '3T.imiss' > 3T_MissingData.txt
+```
+> Then filter out individuals with high percentage of missing data
+```
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T.recode.vcf --keep 3T_MissingData.txt --recode-INFO-all --recode --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70
 ```
 8. Filter out all the sites that are not present in 90% of the individuals 
 ```
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70.recode.vcf --recode-INFO-all --max-missing 0.9 --recode --out ./popsizeABC/RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70.recode.vcf --recode-INFO-all --max-missing 0.9 --recode --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90
 ```
-9. Filter out the sex chromosomes because they have different demographic histories than autosomes - ZW is haploid in half of the individuals (Use this file for popsizeABC)
-> Subset this file based on the pure individuals that you want for each population (FLAM/ICT SYPM - FLAM/ICT ALLO). This txt files are based on having equal representation of individuals in all transects and individuals with low missing data.
+9. Filter out the sex chromosomes because they have different demographic histories than autosomes - ZW is haploid in half of the individuals (Use this file for popsizeABC) - Datased D
+> Subset this VCF file based on the pure individuals that you want for each population (FLAM/ICT SYM - FLAM/ICT ALLO) in each transect. The final individual files I used were based on trying to maximize the number of unrelated individuals with low missing data, but keeping the sample sizes similar across transects.
 ```
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90.recode.vcf --not-chr W --not-chr Z --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90.recode.vcf --not-chr W --not-chr Z --recode-INFO-all --recode --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90_Autosomes
 ``` 
-10. Remove linked sites - LD prunning or thinning (Use this file for FSC and SNAPP). 
+10. Remove linked sites - LD prunning or thinning (Use this file for FSC and StairwatPlot2) - Thinned Dataset D
 ```
-vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes.recode.vcf --thin 100 --recode-INFO-all --recode --out RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp_iMiss0.70_MaxMissing0.90_Autosomes_Thinned
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90_Autosomes.recode.vcf --thin 100 --recode-INFO-all --recode --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90_Autosomes_Thinned
 ```
 ---
 ## Population genetics analysis 
@@ -307,7 +316,87 @@ vcftools --vcf RFLAM_v5_All_iDepth_sDepth4_indels_Biallelic_MaxMissing0.75_3TrRp
 ### 5. Environmental data & isoclines
 ### 6. Demographic analysis 
 #### PopsizeABC
- 
+Followed the [Kiwi github tutorial](https://github.com/jordanbemmels/kiwi-holocene/blob/main/12_PopSizeABC_demography.md) and modified scripts with data for *R. flammigerus*.
+General overview:
+1. Process vcf files into usable formats for popsize
+2. Calculate statistics from observed vcf data for each population
+3. Simulate data and calculate statistics for each population
+4. Compare observed and simulated stats (through ABC inference in R) to find the most likely population size histories
+
+- [x] Step 1: Convert VCFs to the formats needed to run `stat_from_vcf.py` 
+> Following the steps in the tutorial I created a bash script (`popsizeDataProcessing.sh` in the scripts folder) to efficiently process the files for the 4 populations (Pure_Flam_Allopatric, Pure_Flam_Sympatric, Pure_Ict_Allopatric, Pure_Ict_Sympatric) in each of the 3 transects.
+- [x] Step 2: Calculate statistics from observed data using the `stat_from_vcf.py` script from the Kiwi Github 
+> Make necessary edits to the `stat_from_vcf.py` script:
+```
+##### parameters
+pop='Pure_Flam_Allopatric'
+list_ani=IO.read_list('./popsizeABC/transect1/popfiles/Pure_Flam_Allopatric.txt') # list of diploid animals used for computing the summary statistics
+n=len(list_ani)*2 # haploid sample size
+mac=1 # minor allele count threshold for AFS and IBS statistics computation
+mac_ld=1 # minor allele count threshold for LD statistics computation
+L=2000000 # size of each segment, in bp.
+
+##### time windows
+nb_times=30 # number of time window
+Tmax=550000 # the oldest time window will start at Tmax
+a=0.06 # the length of time windows increases when time increases, at a speed that is determined by this coefficient  
+
+##### LD statistics parameters 
+per_err=5 # the length of each interval, as a percentage of the target distance
+r=3.1*(10**(-8)) # the per generation per bp recombination rate (an approximation is sufficient value - Used thre reported one for Ficedula)
+#d=10**8/(2*t) # Hash this line out - This uses an approximation.
+d=1/(2*r*t) # Unhash this line (make it active) since we gave it an r value. 
+
+##### Other changes: lines 92 - 98 to the correct paths
+all_chromo=os.listdir('./popsizeABC/alltransects_files/SYMP_scaffold/'+pop) # this allows processing all VCF files in the specified directory with this path, so that all scaffolds can be included
+for chro in range(len(all_chromo)):
+    # store data and pre-analyse it
+    print 'Processing chromosome ',chro
+    infile_vcf='./popsizeABC/alltransects_files/SYMP_scaffold/'+pop+'/'+all_chromo[chro]
+    [mydata,mymap]=IO.parseVcfFile(infile_vcf,includeInd=list_ani)
+    IO.parsePedFile_nogeno('./popsizeABC/alltransects_files/make_bed_plink/Rflam_pure_flam_symp.fam',mydata)  
+```
+After making the appropiate changes run the modified script `stat_from_vcf.py` from the Kiwi github:
+> If there's 'IndexError: index -1 is out of bounds for axis 0 with size 0', that means that a chromosome(s) has too few SNPS, so move it out of the vcf folders, then re-run
+```
+conda activate popsizeABC
+python ./popsizeABC/popsizeABC_files/comp_stat1.2/stat_from_vcf.py
+```
+- [x] Step 3: Simulate data and calculate statistics with the `simuldata.py` script from the Kiwi github
+> Make the necessary edits to the `simuldata.py` script:
+```
+###### General parameters
+outfile_name='./popsizeABC/res/transect1_allo/T1_allo_sim' # change this for different populations
+nb_rep= #third argument in the `PopsizeABCarray.slurm` script
+nb_seg= #second argument in the `PopsizeABCarray.slurm` script
+
+##### time windows
+n=10 # 5 diploid individuals for allopatric, n=6 for sympatric (change this depending on the number of individuals you have)
+nb_times=30 # must match stat_from_vcf.py file 
+Tmax=550000 # must match stat_from_vcf.py file
+a=0.06 # must match stat_from_vcf.py file
+
+##### prior distributions
+mmu=4.47*(10**(-9)) #Per generation per bp mutation rate calculated using generation time estimated for *R.flammigerus* from Bird 2020.
+Nmin=1 # lower bound for the population size in each time window (in log10 scale)
+Nmax=5 # upper bound for the population size in each time window (in log10 scale)
+
+##### LD statistics parameters
+r=3.1*(10**(-8)) (Ficedula recombination rate) # must match stat_from_vcf.py file 
+per_err=5  # must match stat_from_vcf.py file 
+#d=10**8/(2*t)  # must match stat_from_vcf.py file 
+d=1/(2*r*t)  # must match stat_from_vcf.py file 
+```
+After making the appropiate changes run the modified script `simuldata.py` from the Kiwi github using the PopsizearrayABC.slurm (in the scripts folder in this repository) to conduct approximately 450,000 simulations with the defined parameters. 
+> I did 2 sets of 450,000 simulations per transect - one for allopatric and one for simpatric populations.
+Depending on your tmax and time windows, simulations make take 1-4 days.
+- [x] Step 4: ABC Inference in R
+> concatenate all .stats and .params files in each of the runs
+```
+cat ./popsizeABC/res/transect1_allo/T1_allo_sim_*.*.stats > T1_allo.stat
+cat ./popsizeABC/res/transect1_allo/T1_allo_sim_*.*.params > T1_allo.params
+```
+
 #### Stairwayplot2 
 
 #### FastSIMCOAL2
