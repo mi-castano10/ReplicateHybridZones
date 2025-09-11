@@ -391,14 +391,22 @@ After making the appropiate changes run the modified script `simuldata.py` from 
 > I did 2 sets of 450,000 simulations per transect - one for allopatric and one for simpatric populations.
 Depending on your tmax and time windows, simulations make take 1-4 days.
 - [x] Step 4: ABC Inference in R
-> concatenate all .stats and .params files in each of the runs
+Concatenate all .stats and .params files in each of the runs
 ```
 cat ./popsizeABC/res/transect1_allo/T1_allo_sim_*.*.stats > T1_allo.stat
 cat ./popsizeABC/res/transect1_allo/T1_allo_sim_*.*.params > T1_allo.params
 ```
+Follow the *R* code from the [Kiwi Github](https://github.com/jordanbemmels/kiwi-holocene/blob/main/PopSizeABC/abc_kiwi_git.R) for the ABC analysis and visualization of the results. 
+> Changed paths for all files, edited generations.R (in estim folder), changed Tmax=550000 and gen=2.6
 
 #### Stairwayplot2 
-
+- [x] Step 1: modify the blueprint file (in the scripts folder). I had one blueprint file for either allopatric population (Flam or Ict) in each transect.
+- [x] Step 2: after blueprint file is ready, run:
+```
+module load java
+java -cp stairway_plot_es Stairbuilder two-epoch_fold_FT1.blueprint 
+bash two-epoch_fold_FT1.blueprint.sh
+```
 #### FastSIMCOAL2
 
 ### 7. Geographic clines
