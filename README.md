@@ -44,6 +44,7 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 - [HZAR (R package)](https://cran.r-project.org/package=hzar)
 - [gghybrid (R package)](https://github.com/ribailey/gghybrid)
 - [GEMMA](https://github.com/genetics-statistics/GEMMA)
+- [BEAGLE](https://faculty.washington.edu/browning/beagle/beagle.html)
 
 ---
 
@@ -262,7 +263,7 @@ vcftools --vcf RaFlam.v1_AllSamples_iDepth.recode.vcf --remove-indels --min-alle
 ```
 vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic.recode.vcf --max-missing 0.75 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75
 ```
-4. Subset only *R. flammigerus* individuals and apply minor allele count filter to keep only polymorphic sites between subspecies (Use this dataset for FST, Introgress, Cline analysis freq) - DATASET B
+4. Subset only *R. flammigerus* individuals and apply minor allele count filter to keep only polymorphic sites between subspecies (Use this dataset for FST, Introgress, geographic and genomic cline analysis, GWAS) - DATASET B
 > Further subset this file with just individuals in the three sampling transects (excluding samples from Panama and Ecuador) to calculate per transect FST.
  ```
 vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75.recode.vcf --keep Only_Flammigerus.txt --mac 1 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1
@@ -458,8 +459,25 @@ Rscript ./Hzar_Molecular_Ramphocelus.R
 
 ### 8. Genomic clines
 ### 9. GWAS
-
-
-
-
-
+We used [GEMMA](https://github.com/genetics-statistics/GEMMA) to do a Genome Wide Association Study for rump color hue
+- [x] Step 1: Use Dataset B (no minor allele frequency filter) to impute missing data with [BEAGLE](https://faculty.washington.edu/browning/beagle/beagle.html)
+```
+VCF=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf
+java -Xmx24576m -jar beagle.22Jul22.46e.jar nthreads=4 gt=$VCF out=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_Imputed
+```
+- [x] Step 2: Convert VCF to PLINK format and add the phenotype to the .fam file
+```
+IMPUTEDVCF=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_Imputed.vcf.gz
+plink --gzvcf $IMPUTEDVCF --make-bed --allow-extra-chr --chr-set 80 --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_Imputed
+# Add the phenotype of interest for each individual in a new column (the sixth column) to the RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_Imputed.fam file
+```
+- [x] Step 3: Calculate inter-individual distance matrix to include as a covariate in GEMMA
+```
+bfile=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_Imputed
+gemma -bfile $bfile -gk -1 -o All_Transects_genmma
+```
+- [x] Step 4: Run the GWAS with the matrix as a covariate
+```
+matrix=./All_Transects_genmma.cXX.txt
+gemma -bfile $bfile -k $matrix -lmm 4 -n 1 -o All_Transects_gemma_GWAS
+```
