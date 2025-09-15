@@ -443,9 +443,19 @@ module load java
 java -cp stairway_plot_es Stairbuilder two-epoch_fold_FT1.blueprint 
 bash two-epoch_fold_FT1.blueprint.sh
 ```
-
-
 ### 7. Geographic clines
+To estimate geographic clines we used the R package *Hzar*. 
+- [x] Step 1: Create morphological and molecular data tables to run the cline analysis. 
+
+- [x] Step 2: Modify the scripts `Hzar_Molecular_Ramphocelus.R` and Hzar `Hzar_Morphological_Ramphocelus.R` (in the scripts folder) with the correct paths to the tables that contain allele or trait frequencies of the traits of interest. Also modify the path to save the R.Data object with the results for plotting later on. 
+    
+- [x] Step 3: Send a bash script to have more memory for faster running. (can take a very long time if running locally/for many traits).
+```
+module load Rstudio
+Rscript ./Hzar_Molecular_Ramphocelus.R
+```
+- [x] Step 4: In R read in the rampho_MT2 and rampho_morpho_MT2 RData objects product of the Hzar runs and follow the script `plot_clines.R` in the scripts folder for plotting
+
 ### 8. Genomic clines
 ### 9. GWAS
 
