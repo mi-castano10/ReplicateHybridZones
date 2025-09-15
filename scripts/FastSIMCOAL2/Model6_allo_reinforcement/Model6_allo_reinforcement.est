@@ -1,0 +1,33 @@
+// Priors and rules file
+// *********************
+
+[PARAMETERS]
+//#isInt? #name   #dist.#min  #max
+//all N are in number of haploid individuals
+1  NICT			unif     	500  	100000    	output 
+1  NHYB			unif	 	500  	100000		output 
+1  NFLA			unif     	500  	100000    	output 
+1  TDIV1		unif	 	100  	550000		output bounded //0 to 1 mya, in generation units
+1  TDIV2		unif	 	0    	TDIV1		output bounded paramInRange
+1  TADM2		unif	 	0    	TDIV2		output bounded paramInRange
+1  TADM3		unif	 	0    	TADM2		output bounded paramInRange
+1  ANCSIZE		unif     	100  	1000000   	output 
+1  RESIZE   	unif	 	100  	ANCSIZE		output bounded paramInRange //resize cannot be larger than ancsize
+0  NMICTHYB		logunif		1e-2	20			output //0 to 20 migrants from ICT back into HYB
+0  NMHYBICT		logunif 	1e-2	20			output //0 to 20 migrants from HYB back into ICT
+0  NMHYBFLA		logunif 	1e-2	20			output //0 to 20 migrants from HYB back into FLA
+0  NMFLAHYB		logunif 	1e-2	20			output //0 to 20 migrants from FLA back into HYB
+0  SMALLNMIH	logunif		1e-2	NMICTHYB	output bounded paramInRange // 0 to NMICTHYB migrants from ICT back into HYB
+0  SMALLNMHI	logunif		1e-2	NMHYBICT	output bounded paramInRange // 0 to NMHYBICT migrants from HYB back into ICT
+0  SMALLNMHF	logunif		1e-2	NMHYBFLA	output bounded paramInRange // 0 to NMHYBFLA migrants from HYB back into FLA
+0  SMALLNMFH	logunif		1e-2	NMFLAHYB	output bounded paramInRange // 0 to NMFLAHYB migrants from FLA back into HYB
+
+[COMPLEX PARAMETERS]
+0 RECENTMIGRATEIH = SMALLNMIH/NHYB output //smaller recent backward-time migration from ICT back into HYB as a proportion of HYB. what proportion of HYB is made of ICT migrants? 
+0 RECENTRATEMIGHI = SMALLNMHI/NICT output //smaller recent backward-time migration from HYB back into ICT as a proportion of ICT. what proportion of ICT is made of HYB migrants? 
+0 RECENTMIGRATEHF = SMALLNMHF/NFLA output //smaller recent backward-time migration from HYB back into FLA as a proportion of FLA. what proportion of FLA is made of HYB migrants? 
+0 RECENTRATEMIGFH = SMALLNMFH/NHYB output //smaller recent backward-time migration from FLA back into HYB as a proportion of HYB. what proportion of HYB is made of FLA migrants? 
+0 MIGRATEIH$ = NMICTHYB/NHYB	output //backward-time migration from ICT back into HYB as a proportion of HYB. what proportion of HYB is made of ICT migrants? 
+0 RATEMIGHI$ = NMHYBICT/NICT	output //backward-time migration from HYB back into ICT as a proportion of ICT. what proportion of ICT is made of HYB migrants? 
+0 MIGRATEHF$ = NMHYBFLA/NFLA	output //backward-time migration from HYB back into FLA as a proportion of FLA. what proportion of FLA is made of HYB migrants? 
+0 RATEMIGFH$ = NMFLAHYB/NHYB	output //backward-time migration from FLA back into HYB as a proportion of HYB. what proportion of FLA is made of HYB migrants? 
