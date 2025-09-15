@@ -37,11 +37,11 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 - [PLINK](https://www.cog-genomics.org/plink/)
 - [EEMS](https://github.com/dipetkov/eems)
 - [RStudio](https://posit.co/products/open-source/rstudio/)
-- [HZAR (R package)](https://cran.r-project.org/package=hzar)
-- [fastsimcoal2](http://cmpg.unibe.ch/software/fastsimcoal2/)
 - [PopSizeABC](https://forge-dga.jouy.inra.fr/projects/popsizeabc/)
 - [StairwayPlot2](https://github.com/xiaoming-liu/stairway-plot-v2)
+- [FastSIMCOAL2](http://cmpg.unibe.ch/software/fastsimcoal2/)
 - [EasySFS](https://github.com/isaacovercast/easySFS)
+- [HZAR (R package)](https://cran.r-project.org/package=hzar)
 - [gghybrid (R package)](https://github.com/ribailey/gghybrid)
 - [GEMMA](https://github.com/genetics-statistics/GEMMA)
 
@@ -371,7 +371,7 @@ nb_rep= #third argument in the `PopsizeABCarray.slurm` script
 nb_seg= #second argument in the `PopsizeABCarray.slurm` script
 
 ##### time windows
-n=10 # 5 diploid individuals for allopatric, n=6 for sympatric (change this depending on the number of individuals you have)
+n=10 #for allopatric I had 5 diploid individuals in each population, for sympatric I had n=6 so 3 diploid individuals in each population (change this depending on the number of individuals you have)
 nb_times=30 # must match stat_from_vcf.py file 
 Tmax=550000 # must match stat_from_vcf.py file
 a=0.06 # must match stat_from_vcf.py file
@@ -398,16 +398,52 @@ cat ./popsizeABC/res/transect1_allo/T1_allo_sim_*.*.params > T1_allo.params
 ```
 Follow the *R* code from the [Kiwi Github](https://github.com/jordanbemmels/kiwi-holocene/blob/main/PopSizeABC/abc_kiwi_git.R) for the ABC analysis and visualization of the results. 
 > Changed paths for all files, edited generations.R (in estim folder), changed Tmax=550000 and gen=2.6
+#### FastSIMCOAL2
+- [x] Step 1: calculate a folded Site Frequency Spectrum (SFS) using [easySFS](https://github.com/isaacovercast/easySFS)
+> I used different populaton files depending on which demographic model I was going to test. For the null allopatric models I used a 2 population file and for all the rest I used a 3 population file.
+> This file just has the sample name in column 1 and the population it belongs to in column 2. 
+```
+#Use the preview SFS function to see how many sites/individuals you will get with a range of projections. The goal is to maximize the number of sites, while keeping the maximum number of individuals.
+conda activate easySFS
+./easySFS/easySFS.py -i RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90_Autosomes_Thinned.vcf -p 2popfile.txt --preview
+#After you know which projection you will use run:
+./easySFS/easySFS.py -i RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_3T_iMiss0.70_MaxMissing0.90_Autosomes_Thinned.vcf -p 2popfile.txt --proj 10,10 -a
+```
+easySFS will produce two output folders, one of them has the output in the format required for FastSIMCOAL2. 
+- [x] Step 2: Use the multispeciesSFS (MSFS) as input for FastSIMCOAL2.
+> Run the following command as a bash script to do 100 runs of FastSIMCOAL with the pre-determined parameters for each model. I ran 15 models for each transect independently so change the prefix, input and output folder accordingly. 
+> Example .tpl and .est files for some of the demographic models tested are included in the scripts folder. 
+```
+PREFIXA="Model1_allo_null_2pop"
 
+#This folder already contains the $PREFIXA.tpl $PREFIXA.est and $PREFIXA_MSFS.obs files:
+cd ./FSC/transect1/Model1_allo_null_2pop
+
+#Do multiple runs; first of copy the files to each run$i folder and then run FSC 
+for i in {1..100}
+do
+	mkdir run$i
+	cp ${PREFIXA}.tpl ${PREFIXA}.est ${PREFIXA}_MSFS.obs run$i"/"
+	cd run$i
+	/software/fastsimcoal/27/fsc27093 -t ${PREFIXA}.tpl -n250000 -e ${PREFIXA}.est -M -L40 -s0 -u -q --msfs
+	cd ..
+done
+
+#what are the flags here: -m computers SFS for the minor allele for each pop sample -M performs parameter estimation by maximum composite likelihood - u Generates or uses MSFS -n number of simulations to perform per parameter file -L number of loops (ECM cycles) for which the lhood is computed on both monomorphic and polymorphic sites. -s0 output DNA as SNP data with a given maximum number to output (use 0 to output all SNPs in the DNA sequences). 
+```
+- [x] Step 3: After the 100 runs of FSC are done, select the best run for each model (the one with the highest likelyhood) and then calculate AIC. Scripts to do these steps are available in the speciation genomics github [R scripts from Joana Meier](https://speciationgenomics.github.io/fastsimcoal2/)
+> The script expect output files of different runs to be found in folders starting with run
+ 
 #### Stairwayplot2 
-- [x] Step 1: modify the blueprint file (in the scripts folder). I had one blueprint file for either allopatric population (Flam or Ict) in each transect.
+- [x] Step 1: modify the blueprint file (file and details on the parameters used are in the scripts folder).
+> I had one blueprint file for either allopatric population (Flam or Ict) in each transect.
 - [x] Step 2: after blueprint file is ready, run:
 ```
 module load java
 java -cp stairway_plot_es Stairbuilder two-epoch_fold_FT1.blueprint 
 bash two-epoch_fold_FT1.blueprint.sh
 ```
-#### FastSIMCOAL2
+
 
 ### 7. Geographic clines
 ### 8. Genomic clines
