@@ -1,4 +1,5 @@
-# Load the package
+### Modified code from original script of the R package hzar: hybrid zone analysis using an R software package 
+
 library(hzar)
 library(doMC)
 library(foreach)
@@ -23,23 +24,23 @@ if(require(doMC)){
 }
 
 # READ IN THE DATA
-# Note that this is the individual data, with labels identifying the locality of each sample.
+# Note that this is the individual data, with labels identifying the locality of each sample. This should be the same format as "manakinMorphological" in the original Hzar tutorial.
 Morphological<-read.csv("/scratch/juy3_lab/GBS_Ramphocelus/ClineAnalysis/T2/ramphocelusMorphological_MT2.txt", h=T, row.names = 1)
 Morphological$locality<-as.factor(Morphological$locality)
 
-# Load locality data matching each localility to a site ID and a transect distance.
+# Load locality data matching each localility to a site ID and a transect distance. This should be the same format as "manakinLocality" in the original Hzar tutorial.
 Locations<-read.table("/scratch/juy3_lab/GBS_Ramphocelus/ClineAnalysis/T2/T2_Locality.txt", h=T)
 Locations$locality<-as.factor(Locations$locality) 
 
 # Morphological Analysis
-# We can do as many traits/alleles at one locus as we want. 
+# We can do as many traits as we want. 
 # So I did this for loop to create a list to stay organized.
 
 rampho_morpho<-list()
 
 # First pick the traits you want to build your clines for
 # In this case color and body size. 
-
+# This should have the exact same names as the traits in manakinMorphological
 traits_morpho<-c("rump.color.hue","rump.color.chroma","body.size")
 
 # Blank out space in memory to hold molecular analysis
@@ -536,5 +537,6 @@ for (trait in traits_morpho){
     rampho_morpho[[trait]]$analysis$oDG$data.groups[[rampho_morpho[[trait]]$analysis$model.name]]
 }
 
+# Save the results in an Rdata object to plot later
 rampho_morpho_MT2<-rampho_morpho
 save(rampho_morpho_MT2, file="/scratch/juy3_lab/GBS_Ramphocelus/ClineAnalysis/T2/rampho_morpho_MT2.RData")
