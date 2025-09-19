@@ -4,14 +4,7 @@ library(hzar)
 library(doMC)
 library(foreach)
 library(tidyverse)
-#library(raster)
-#library(rgeos)
-#library(drc)
-#library(Hmisc)
-#library(dr4pl)
-#library(ggrepel)
-#library(sf)
-#library(geosphere)
+
 
 ## If you have doMC, use for each in parallel mode
 ## to speed up computation.
