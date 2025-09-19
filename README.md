@@ -425,7 +425,6 @@ vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_Only
 vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --positions All_Flam_All_Ict_Fst0.9.txt --keep All_Admixed --out All_Admixed_diagSNPs_Fst0.9
 ```
 - [x] Step 4: Follow the R script `Ramphocelus_Triangle_Introgress.Rmd` to run [Introgress](https://CRAN.R-project.org/package=introgress), calculate hybrid index and interspecific heterozigosity using the diagnostic SNPS and plot triangle plots based on rump color hue or locality. 
-### 5. Environmental data & isoclines
 ### 6. Demographic analysis 
 #### PopsizeABC
 Followed the [Kiwi github tutorial](https://github.com/jordanbemmels/kiwi-holocene/blob/main/12_PopSizeABC_demography.md) and modified scripts with data for *R. flammigerus*.
