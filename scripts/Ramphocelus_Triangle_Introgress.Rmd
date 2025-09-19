@@ -1,0 +1,187 @@
+```{r}
+library(Rmisc)
+library(tidyverse)
+library(ape)
+library(pegas)
+library(seqinr)
+library(ggplot2)
+library(adegenet)
+library(vcfR)
+library(introgress)
+library(data.table)
+```
+#### REPEAT THESE STEPS WITH THE VCF FILES FOR ALL, T1, T2 and T3 INDIVIDUALS. 
+```{r}
+flammigerus_SNPs <- read.vcfR(file.choose()) # vcf file with SNPS with Fst > 0.9 and only parental 1 individuals 
+flammigerus <- vcfR2genind(flammigerus_SNPs)
+raw_flammigerus <-genind2df(flammigerus,sep="/")
+raw_flammigerus<-t(as.matrix(raw_flammigerus)) #to format the file as input for INTROGRESS
+
+icteronotus_SNPs <- read.vcfR(file.choose()) # vcf file with SNPS with Fst > 0.9 and only parental 2 individuals
+icteronotus <- vcfR2genind(icteronotus_SNPs)
+raw_icteronotus<-genind2df(icteronotus,sep="/")
+raw_icteronotus<-t(as.matrix(raw_icteronotus))
+
+admixed_SNPs <- read.vcfR(file.choose()) # vcf file with SNPS with Fst > 0.9 and admixed individuals 
+admixed <- vcfR2genind(admixed_SNPs)
+raw_admixed<-genind2df(admixed,sep="/")
+raw_admixed<-t(as.matrix(raw_admixed))
+```
+
+```{r}
+##loci information file
+SNP<-as.vector(rownames(raw_admixed))
+type<-rep("c",length(SNP))
+loci<-cbind(SNP, type) ## this is the file for the dominance. Given there is no info, it is safe to assume SNPs are codominat
+```
+
+```{r}
+##input the files
+count.matrix<-prepare.data(admix.gen=raw_admixed, loci.data=loci, parental1=raw_flammigerus, parental2=raw_icteronotus, pop.id=F, ind.id=F, fixed=FALSE,sep.rows=FALSE, sep.columns=FALSE)
+#Hybrid index for admixed individuals
+hi.index.admixed<-est.h(introgress.data=count.matrix, loci.data=loci, fixed=FALSE, p1.allele=raw_flammigerus, p2.allele=raw_icteronotus)
+#heterozygocity for admixed individuals
+admixed.het<-calc.intersp.het(introgress.data=count.matrix)
+
+##input the files
+count.matrix<-prepare.data(admix.gen=raw_flammigerus, loci.data=loci,parental1=raw_flammigerus, parental2=raw_icteronotus,pop.id=F, ind.id=F, fixed=FALSE,sep.rows=FALSE, sep.columns=FALSE)
+#Hybrid index for parental 1
+hi.index.flammigerus<-est.h(introgress.data=count.matrix, loci.data=loci, fixed=FALSE, p1.allele=raw_flammigerus, p2.allele=raw_icteronotus)
+#heterozygocity for parental 1
+flammigerus.het<-calc.intersp.het(introgress.data=count.matrix)
+
+##input the files
+count.matrix<-prepare.data(admix.gen=raw_icteronotus, loci.data=loci,parental1=raw_flammigerus, parental2=raw_icteronotus,pop.id=F, ind.id=F, fixed=FALSE,sep.rows=FALSE, sep.columns=FALSE)
+#Hybrid index for parental 2
+hi.index.icteronotus<-est.h(introgress.data=count.matrix, loci.data=loci, fixed=FALSE, p1.allele=raw_flammigerus, p2.allele=raw_icteronotus)
+#heterozygocity for parental 2
+icteronotus.het<-calc.intersp.het(introgress.data=count.matrix)
+
+## I do the same for both parental populations because I want to include them in the graph.
+## the default introgress' graph will include only admixed individuals
+```
+
+```{r}
+### to invert the X asis so that the red is plotted to the right and the yellow to the left of the plot (following the transect linearity)
+hi.index.flammigerus$h <- (1-hi.index.flammigerus$h)
+hi.index.icteronotus$h <- (1-hi.index.icteronotus$h)
+hi.index.admixed$h <- (1-hi.index.admixed$h)
+```
+
+```{r}
+# Extract the names of the aadmixed individuals to plot the correct ("phenotypic color")
+idsadm<-colnames(raw_admixed)
+idsflam<-colnames(raw_flammigerus)
+idsict<-colnames(raw_icteronotus)
+```
+
+#TO PLOT BY PHENOTYPIC ASSIGNMENT (assignment in the field)
+```{r}
+# Extract the first three characters of each name
+name_adm_prefix <- substr(idsadm, 1, 3)
+name_flam_prefix <- substr(idsflam, 1, 3)
+name_ict_prefix <- substr(idsict, 1, 3)
+# Initialize an empty vector to store colors
+color_vector_adm <- character(length(idsadm))
+color_vector_flam <- character(length(idsflam))
+color_vector_ict <- character(length(idsict))
+# Assign colors based on name prefixes
+color_vector_adm[name_adm_prefix == "RFI"] <- "yellow"
+color_vector_adm[name_adm_prefix == "RFF"] <- "red"
+color_vector_adm[name_adm_prefix == "RFH"] <- "darkorange"
+
+color_vector_flam[name_flam_prefix == "RFI"] <- "yellow"
+color_vector_flam[name_flam_prefix == "RFF"] <- "red"
+color_vector_flam[name_flam_prefix == "RFH"] <- "darkorange"
+
+color_vector_ict[name_ict_prefix == "RFI"] <- "yellow"
+color_vector_ict[name_ict_prefix == "RFF"] <- "red"
+color_vector_ict[name_ict_prefix == "RFH"] <- "darkorange"
+# Print the color vector
+print(color_vector_adm)
+print(color_vector_flam)
+print(color_vector_ict)
+```
+
+#TO PLOT BY LOCALITY
+```{r}
+# Initialize an empty vector to store colors
+color_vector_adm <- character(length(idsadm))
+color_vector_flam <- character(length(idsflam))
+color_vector_ict <- character(length(idsict))
+
+grayscale_palette <- grDevices::colorRampPalette(c("black", "white"))(8)
+print(grayscale_palette)
+
+# Assign colors based on locality prefixes (assuming the samples have the loclity in the names)
+color_vector_adm[grepl("LA", idsadm)] <- grayscale_palette[1]
+color_vector_adm[grepl("LB", idsadm)] <- grayscale_palette[2]
+color_vector_adm[grepl("LC", idsadm)] <- grayscale_palette[3]
+color_vector_adm[grepl("LD", idsadm)] <- grayscale_palette[4]
+color_vector_adm[grepl("LE", idsadm)] <- grayscale_palette[5]
+color_vector_adm[grepl("LF", idsadm)] <- grayscale_palette[6]
+color_vector_adm[grepl("LG", idsadm)] <- grayscale_palette[7]
+color_vector_adm[grepl("LH", idsadm)] <- grayscale_palette[8]
+
+color_vector_flam[grepl("LA", idsflam)] <- grayscale_palette[1]
+color_vector_flam[grepl("LB", idsflam)] <- grayscale_palette[2]
+color_vector_flam[grepl("LC", idsflam)] <- grayscale_palette[3]
+color_vector_flam[grepl("LD", idsflam)] <- grayscale_palette[4]
+color_vector_flam[grepl("LE", idsflam)] <- grayscale_palette[5]
+color_vector_flam[grepl("LF", idsflam)] <- grayscale_palette[6]
+color_vector_flam[grepl("LG", idsflam)] <- grayscale_palette[7]
+color_vector_flam[grepl("LH", idsflam)] <- grayscale_palette[8]
+
+color_vector_ict[grepl("LA", idsict)] <- grayscale_palette[1]
+color_vector_ict[grepl("LB", idsict)] <- grayscale_palette[2]
+color_vector_ict[grepl("LC", idsict)] <- grayscale_palette[3]
+color_vector_ict[grepl("LD", idsict)] <- grayscale_palette[4]
+color_vector_ict[grepl("LE", idsict)] <- grayscale_palette[5]
+color_vector_ict[grepl("LF", idsict)] <- grayscale_palette[6]
+color_vector_ict[grepl("LG", idsict)] <- grayscale_palette[7]
+color_vector_ict[grepl("LH", idsict)] <- grayscale_palette[8]
+
+# Print the color vector
+print(color_vector_adm)
+print(color_vector_flam)
+print(color_vector_ict)
+```
+
+#TO PLOT BY HEX COLOR (Table with sampleID and HexColor calculated from the Hue -H4 measure with Pavo2). 
+```{r}
+# Initialize an empty vector to store colors
+color_vector_adm <- character(length(idsadm))
+color_vector_flam <- character(length(idsflam))
+color_vector_ict <- character(length(idsict))
+
+# Match idsadm with the site_IDs in T* color_df
+matching_indices_adm <- match(idsadm, T1$siteIDs)
+matching_indices_flam <- match(idsflam, T1$siteIDs)
+matching_indices_ict <- match(idsict, T1$siteIDs)
+
+# Assign colors from HexColor column in T* color_df based on matching indices
+color_vector_adm <- T1$HexColor[matching_indices_adm]
+color_vector_flam <- T1$HexColor[matching_indices_flam]
+color_vector_ict <- T1$HexColor[matching_indices_ict]
+
+# Print the color vector
+print(color_vector_adm)
+print(color_vector_flam)
+print(color_vector_ict)
+```
+
+#### T1 ####
+```{r}
+#pdf(file="./Introgress/T1/T1_TrianglePlot_FinalHEX.pdf", height = 6 )
+pdf(file="./Introgress/T1/T1_TrianglePlot_FinalLocality_Legend.pdf", height = 6 )
+par(mar=c(5,5,2,2))
+plot (icteronotus.het,hi.index.icteronotus$h, xlab="Hybrid index",ylab="Heterozygosity", type="n",cex.axis=1.5, cex.lab=1.5, bty="l",ylim=c(-0.05,1.05), xlim=c(-0.05,1.05))
+legend(-0.08,1.10, c("A","B","C","D","E","F","G","H"),pt.cex= 1.5, pt.bg =grayscale_palette, pch=c(22,22,22,22,22,22,22,22), box.lty=0,cex=1.3,bg=0)
+segments(0,0, 0.5, 1, lwd=3, col="black")
+segments(0.5,1, 1,0, lwd=3, col="black")
+points(hi.index.flammigerus$h,flammigerus.het,pch=24, bg=color_vector_flam,cex=2)
+points(hi.index.icteronotus$h,icteronotus.het, pch=24, bg=color_vector_ict,cex=2)
+points(hi.index.admixed$h,admixed.het, pch=24, bg=color_vector_adm,cex=2)
+dev.off()
+##save as TIFF 550x500
+```
