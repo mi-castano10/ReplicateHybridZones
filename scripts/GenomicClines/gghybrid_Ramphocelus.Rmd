@@ -1,0 +1,962 @@
+---
+title: "GGhybrid_Ramphocelus"
+author: Maria I. Castano
+---
+### To run this script you need to first convert you vcf files to STRUCTURE format using PGD spider and then modify them using the GenoTo GGhybrid R script ###
+
+```{r}
+#install.packages("devtools"); devtools::install_github("ribailey/gghybrid")
+library(gghybrid)
+library(dplyr)
+library(coda)
+setwd("./GenomicClines")
+```
+
+```{r}
+#Load data, in this case without specifying the number of loci (useful if this is not known in advance). 
+
+dat_T1 <- read.data(file="./GenomicClines/T1/StructureData_T1.csv",nprecol=2,NUMINDS=47,MISSINGVAL=NA)
+dat_T2 <- read.data(file="./GenomicClines/T2/StructureData_T2.csv",nprecol=2,NUMINDS=79,MISSINGVAL=NA)
+dat_T3 <- read.data(file="./GenomicClines/T3/StructureData_T3.csv",nprecol=2,NUMINDS=61,MISSINGVAL=NA)
+```
+
+```{r}
+#Data preparation and filtering. Here I filter out loci that have a minor allele
+#frequency greater than 0.1 in both parental reference sets and also AF.CIoverlap = FALSE 
+#recommended filtering option IF parental reference samples are included 
+#removes all loci for which there is overlap between S0 and S1 in the Bayesian posterior 95% credible intervals of allele frequency
+
+#The function uses objects produced by 'read.data'#
+
+datasets <- c("dat_T1","dat_T2","dat_T3")
+
+for (name in datasets) {
+  dataset <-get(name)
+  prepdata_name<-paste0("prep",name)
+  assign(prepdata_name, data.prep(
+    data=dataset$data,
+    loci=dataset$loci,
+    alleles=dataset$alleles,
+    S0="icteronotus", #POPID names for the first parental reference set#
+    S1="flammigerus", #POPID names for the second parental reference set#
+    precols=dataset$precols,
+    max.S.MAF = 0.1,	#Filtering by parental minor allele frequency#
+    min.diff=0.5, #Keep only loci with this minimum allele frequency difference between pure parental individuals 
+    AF.CIoverlap=FALSE,
+    return.genotype.table=T,
+    return.locus.table=T
+  ))
+
+# Optionally, you can also print the Nloci.postfilter result
+  print(paste0("Nloci.postfilter for ", name, ":"))
+  print(get(prepdata_name)$Nloci.postfilter)
+}
+
+#'return.genotype.table=T' makes an optional table of genotypes, where for each locus
+#an individual's genotype (assuming diploidy) will be 0 (two copies of the allele with
+#relatively higher frequency in the 'S0' parental set), 1 (heterozygote), 2 (two copies
+#of the designated 'S1' allele). This table isn't needed in downstream functions, but
+#could be useful e.g. for estimating parental linkage disequilibria (associations of
+#alleles from the same parent species).
+
+#'return.locus.table=T' is also optional and not needed downstream. It's just a table
+#with one row per marker, giving some information on parental allele frequencies, sample
+#sizes etc.
+
+```
+
+```{r}
+#First, run hybrid index estimation#
+
+# Iterate through each dataset name
+for (name in datasets) {
+  # Check if the corresponding prepdata object exists in the environment
+  prepdata_name <- paste0("prep", name)
+  if (exists(prepdata_name)) {
+    # Get the prepdata object
+    prepdata <- get(prepdata_name)
+    
+    # Create a unique variable name for each hindlabel object
+    hindlabel_name <- paste0("hindlabel_", name)
+    
+    # Run the esth function
+    hindlabel_result <- esth(
+      data.prep.object = prepdata$data.prep,
+      read.data.precols = get(name)$precols,
+      include.Source = TRUE,
+      nitt = 3000,
+      burnin = 1000
+    )
+    
+    # Store the result in the global environment with a unique name
+    assign(hindlabel_name, hindlabel_result)
+    
+    # Optionally, print or inspect the result
+    print(paste0("Result for ", name, ":"))
+    print(get(hindlabel_name))
+  } else {
+    warning(paste("Prep data object", prepdata_name, "does not exist in the environment."))
+  }
+}
+```
+
+```{r}
+# Create a list of hindlabel objects and their corresponding names
+hindlabel_list <- list(
+  hindlabel_T1 = hindlabel_dat_T1,
+  hindlabel_T2 = hindlabel_dat_T2,
+  hindlabel_T3 = hindlabel_dat_T3
+)
+
+# Create a list of file names for the PDFs
+file_names <- list(
+  hindlabel_T1 = "./GenomicClines/HI_T1.pdf",
+  hindlabel_T2 = "./GenomicClines/HI_T2.pdf",
+  hindlabel_T3 = "./GenomicClines/HI_T3.pdf"
+)
+
+# Iterate through each hindlabel object and generate the HI plots
+for (name in names(hindlabel_list)) {
+  # Retrieve the hindlabel object
+  hindlabel <- hindlabel_list[[name]]
+  
+  # Generate the PDF file
+  pdf(file = file_names[[name]], height = 5, width = 7)
+  
+  # Set the key for rapid sorting and subsetting
+  setkey(hindlabel$hi, POPID)
+  
+  # Plot the hybrid indices
+  abc <- plot_h(
+    data = hindlabel$hi[c("icteronotus", "flammigerus", "hybrid")], # Subset of POPIDs
+    test.subject = hindlabel$test.subject,
+    mean.h.by = "POPID",      # Calculate the mean hybrid index for each value of the "POPID" column
+    sort.by = c("mean_h", "POPID", "h_posterior_mode"), # Order test subjects along the x axis
+    col.group = "POPID",
+    group.sep = "POPID",
+    fill.source = TRUE,
+    basic.lines = FALSE,
+    source.col = c("yellow2", "red"),
+    source.limits = c("black", "black"),
+    cex = 1, pch = 19,
+    cex.lab = 1.5, cex.main = 1.5, ylim = c(0, 1)
+  )
+  
+  # Close the PDF device
+  dev.off()
+  
+  # Optionally, print a message indicating the plot was created
+  cat("Plot created for", name, "\n")
+}
+```
+
+```{r}
+T1_HI<-as.data.frame(hindlabel_dat_T1) %>% dplyr::select(hi.INDLABEL,hi.h_posterior_mode)
+colnames(T1_HI)<-c("GBS_ID","HI")
+T2_HI<-as.data.frame(hindlabel_dat_T2) %>% dplyr::select(hi.INDLABEL,hi.h_posterior_mode)
+colnames(T2_HI)<-c("GBS_ID","HI")
+T3_HI<-as.data.frame(hindlabel_dat_T3) %>% dplyr::select(hi.INDLABEL,hi.h_posterior_mode)
+colnames(T3_HI)<-c("GBS_ID","HI")
+
+write.table(T1_HI, file="./GenomicClines/T1_HI.txt",row.names = FALSE,col.names = TRUE)
+write.table(T2_HI, file="./GenomicClines/T2_HI.txt",row.names = FALSE,col.names = TRUE)
+write.table(T3_HI, file="./GenomicClines/T3_HI.txt",row.names = FALSE,col.names = TRUE)
+```
+
+# Second, Run the genomic clines with the hybrid indices estimated previously. 
+
+```{r}
+# Create a list of prepdata objects
+prepdata_list <- list(
+  prepdata_T1 = prepdat_T1,
+  prepdata_T2 = prepdat_T2,
+  prepdata_T3 = prepdat_T3
+)
+
+# Create a list of hindlabel objects
+hindlabel_list <- list(
+  hindlabel_T1 = hindlabel_dat_T1,
+  hindlabel_T2 = hindlabel_dat_T2,
+  hindlabel_T3 = hindlabel_dat_T3
+)
+
+# Create a list of dataset names to match the prepdata and hindlabel objects
+dataset_names <- c("T1","T2","T3")
+
+# Initialize a list to store genomic cline results
+gc_results <- list()
+
+# Iterate through each dataset name
+for (name in dataset_names) {
+  # Retrieve the prepdata and hindlabel objects
+  prepdata <- prepdata_list[[paste0("prepdata_", name)]]
+  hindlabel <- hindlabel_list[[paste0("hindlabel_", name)]]
+  
+  # Check if the prepdata and hindlabel objects exist
+  if (!is.null(prepdata) && !is.null(hindlabel)) {
+    # Run the genomic cline analysis
+    gc_result <- ggcline(
+      data.prep.object = prepdata$data.prep,
+      esth.object = hindlabel,
+      read.data.precols = get(paste0("dat_", name))$precols,
+      include.Source = TRUE,
+      return.likmeans = TRUE,
+      # plot.test.subject = c("S8_20319175"), # Optional
+      # plot.col = c("orange"),              # Optional
+      # plot.ylim = c(-2, 3),                # Optional
+      nitt = 7000, burnin = 3000, print.k = 50
+    )
+    
+    # Calculate the means and add to the result
+    means <- colMeans(gc_result$gc[,-1])
+    mean_row <- data.frame(locus = "Mean", t(means))
+    gc_result$gc <- rbind(gc_result$gc, mean_row)
+    
+    # Store the result in the list
+    gc_results[[paste0("gc_", name, "_All")]] <- gc_result
+    
+    # Optionally, print a message indicating the analysis was completed
+    cat("Genomic cline analysis completed for", name, "\n")
+  } else {
+    warning(paste("Prepdata or hindlabel object for", name, "does not exist in the environment."))
+  }
+}
+
+# Optionally, inspect the gc_results list
+
+save(gc_results, file="./GenomicClines/GC.RData")
+```
+
+# To confirm significance of outlier loci, run the genomic cline estimation with pareamters fixed to null values (u=0.5 or v=1). 
+```{r}
+# Create a list of GC objects
+gc_list <- list(
+  gc_T1 = gc_results$gc_T1_All$gc,
+  gc_T2 = gc_results$gc_T2_All$gc,
+  gc_T3 = gc_results$gc_T3_All$gc
+)
+
+# Initialize a list to store genomic cline results
+gc_results_v_fixed <- list()
+
+# Iterate through each dataset name
+for (name in dataset_names) {
+  # Retrieve the prepdata, hindlabel and gc cline objects
+  prepdata <- prepdata_list[[paste0("prepdata_", name)]]
+  hindlabel <- hindlabel_list[[paste0("hindlabel_", name)]]
+  gc<- gc_list[[paste0("gc_", name)]]
+  
+  # Check if the prepdata and hindlabel objects exist
+  if (!is.null(prepdata) && !is.null(hindlabel) && !is.null(gc)) {
+    # Run the genomic cline analysis with v fixed
+    gc_result_v_fixed <- ggcline(
+      data.prep.object = prepdata$data.prep,
+      esth.object = hindlabel,
+      read.data.precols = get(paste0("dat_", name))$precols,
+      include.Source = TRUE,
+      return.likmeans = TRUE,
+      fix.subject.v = gc$locus,
+      fix.value.v = 1,
+      # plot.test.subject = c("S8_20319175"), # Optional
+      # plot.col = c("orange"),              # Optional
+      # plot.ylim = c(-2, 3),                # Optional
+      nitt = 7000, burnin = 3000, print.k = 50
+    )
+
+    # Store the result in the list
+    gc_results_v_fixed[[paste0("gc_", name, "_All")]] <- gc_result_v_fixed
+    
+    # Optionally, print a message indicating the analysis was completed
+    cat("Genomic cline analysis with v fixed completed for", name, "\n")
+  } else {
+    warning(paste("Prepdata or hindlabel object for", name, "does not exist in the environment."))
+  }
+}
+
+# Optionally, inspect the gc_results list
+
+save(gc_results_v_fixed,file="./GenomicClines/GC_v_fixed.RData")
+```
+
+```{r}
+# Initialize a list to store genomic cline results
+gc_results_c_fixed <- list()
+
+# Iterate through each dataset name
+for (name in dataset_names) {
+  # Retrieve the prepdata, hindlabel and gc cline objects
+  prepdata <- prepdata_list[[paste0("prepdata_", name)]]
+  hindlabel <- hindlabel_list[[paste0("hindlabel_", name)]]
+  gc<- gc_list[[paste0("gc_", name)]]
+  
+  # Check if the prepdata and hindlabel objects exist
+  if (!is.null(prepdata) && !is.null(hindlabel) && !is.null(gc)) {
+    # Run the genomic cline analysis with c fixed
+    gc_result_c_fixed <- ggcline(
+      data.prep.object = prepdata$data.prep,
+      esth.object = hindlabel,
+      read.data.precols = get(paste0("dat_", name))$precols,
+      include.Source = TRUE,
+      return.likmeans = TRUE,
+      fix.subject.centre = gc$locus,
+      fix.value.centre = 0.5,
+      # plot.test.subject = c("S8_20319175"), # Optional
+      # plot.col = c("orange"),              # Optional
+      # plot.ylim = c(-2, 3),                # Optional
+      nitt = 7000, burnin = 3000, print.k = 50
+    )
+
+    # Store the result in the list
+    gc_results_c_fixed[[paste0("gc_", name, "_All")]] <- gc_result_c_fixed
+    
+    # Optionally, print a message indicating the analysis was completed
+    cat("Genomic cline analysis with c fixed completed for", name, "\n")
+  } else {
+    warning(paste("Prepdata or hindlabel object for", name, "does not exist in the environment."))
+  }
+}
+
+# Optionally, inspect the gc_results list
+
+save(gc_results_c_fixed,file="./GenomicClines/GC_c_fixed.RData")
+```
+
+#Now compare the fixed vs intial results to assess significance. 
+```{r}
+gclinecomp_vfixed=compare.models(
+ ggcline.object1=gc_results_v_fixed$gc_T1_All,
+ ggcline.object2=gc_results$gc_T1_All,
+ ggcline.pooled=FALSE              #No pooling so use the default FALSE#
+)
+
+gclinecomp_vfixed[order(waicdiff_npar_AICscale)]
+
+
+setkey(gclinecomp_vfixed,locus);setkey(gc_results$gc_T1_All$gc,locus)
+gcomp=gclinecomp_vfixed[gc_results$gc_T1_All$gc]
+```
+
+```{r}
+#This time, the blue crosses (v parameter) should more closely match the waic results.
+
+plot(gcomp[,-log10(centre_pvalue)]~gcomp[,waicdiff_npar_AICscale],type="n",ylab="-log10(p value) centre and v")
+points(gcomp[,-log10(v_pvalue)]~gcomp[,waicdiff_npar_AICscale],col="blue",pch=4)
+points(gcomp[,-log10(centre_pvalue)]~gcomp[,waicdiff_npar_AICscale],col="red")
+abline(h=-log10(0.05),col="grey",lty=2)                   #Grey line indicates p = 0.05#
+```
+```{r}
+#A closer look at those borderline significant, indicated by the grey lines 
+#(x axis > -4 and y axis < 1.3 is relatively weak evidence for deviation from null).
+
+plot(gcomp[,-log10(centre_pvalue)]~gcomp[,waicdiff_npar_AICscale],type="n",xlim=c(-50,5),ylim=c(0,40),ylab="logit(p value) centre and v")
+points(gcomp[,-log10(v_pvalue)]~gcomp[,waicdiff_npar_AICscale],col="blue",pch=4)
+points(gcomp[,-log10(centre_pvalue)]~gcomp[,waicdiff_npar_AICscale],col="red")
+abline(h=-log10(0.05),v=-4,col="grey",lty=2)                   #Grey line indicates p = 0.05#
+
+```
+### AIC FOR V FIXED
+```{r}
+#####
+#AIC#
+#####
+# Create a list of GC objects
+gc_list <- list(
+  gc_T1 = gc_results$gc_T1_All,
+  gc_T2 = gc_results$gc_T2_All,
+  gc_T3 = gc_results$gc_T3_All
+)
+# Create a list of GC objects with v fixed
+gc_list_v <- list(
+  gc_v_T1 = gc_results_v_fixed$gc_T1_All,
+  gc_v_T2 = gc_results_v_fixed$gc_T2_All,
+  gc_v_T3 = gc_results_v_fixed$gc_T3_All
+)
+# Initialize a list to store AIC list results
+AIC_v_fixed <- list()
+
+# Iterate through each dataset name
+for (name in dataset_names) {
+  # Retrieve the prepdata, hindlabel and gc cline objects
+  prepdata <- prepdata_list[[paste0("prepdata_", name)]]
+  hindlabel <- hindlabel_list[[paste0("hindlabel_", name)]]
+  gc<- gc_list[[paste0("gc_", name)]]
+  gc_v<- gc_list_v[[paste0("gc_v_", name)]]
+  
+  # Check if the prepdata and hindlabel objects exist
+  if (!is.null(prepdata) && !is.null(hindlabel) && !is.null(gc) && !is.null(gc_v)) {
+    
+    aic_v_fixed=calc_AIC(
+      data.prep.object=prepdata$data.prep,
+      esth.object=hindlabel,
+      ggcline.object=gc_v,
+      test.subject="locus",
+      ggcline.pooled=FALSE)
+    
+    aic_no_fixed=calc_AIC(
+      data.prep.object=prepdata$data.prep,
+      esth.object=hindlabel,
+      ggcline.object=gc,
+      test.subject="locus",
+      ggcline.pooled=FALSE)
+    
+    #Now join the tables and calculate the difference in AIC for each locus.
+    setkey(aic_no_fixed,locus);setkey(aic_v_fixed,locus);
+    aic_both=aic_no_fixed[aic_v_fixed];#The columns named 'i...' refer to the second table, aic_v_fixed
+    aic_both[,aicdiff:=AIC - i.AIC]#Positive values favour the less complex model (v fixed at 1)
+    # Order the results by AIC difference
+    ordered_AIC <- aic_both[order(aicdiff)]
+    # Store the ordered results in the AIC list with a descriptive name
+    AIC_v_fixed[[paste0("AIC_v_fixed_", name)]] <- ordered_AIC
+  }
+}
+
+```
+
+### AIC FOR C FIXED
+```{r}
+#####
+#AIC#
+#####
+# Create a list of GC objects
+gc_list <- list(
+  gc_T1 = gc_results$gc_T1_All,
+  gc_T2 = gc_results$gc_T2_All,
+  gc_T3 = gc_results$gc_T3_All
+)
+# Create a list of GC objects with c fixed
+gc_list_c <- list(
+  gc_c_T1 = gc_results_c_fixed$gc_T1_All,
+  gc_c_T2 = gc_results_c_fixed$gc_T2_All,
+  gc_c_T3 = gc_results_c_fixed$gc_T3_All
+)
+# Initialize a list to store AIC list results
+AIC_c_fixed <- list()
+
+# Iterate through each dataset name
+for (name in dataset_names) {
+  # Retrieve the prepdata, hindlabel and gc cline objects
+  prepdata <- prepdata_list[[paste0("prepdata_", name)]]
+  hindlabel <- hindlabel_list[[paste0("hindlabel_", name)]]
+  gc<- gc_list[[paste0("gc_", name)]]
+  gc_c<- gc_list_c[[paste0("gc_c_", name)]]
+  
+  # Check if the prepdata and hindlabel objects exist
+  if (!is.null(prepdata) && !is.null(hindlabel) && !is.null(gc) && !is.null(gc_c)) {
+    
+    aic_c_fixed=calc_AIC(
+      data.prep.object=prepdata$data.prep,
+      esth.object=hindlabel,
+      ggcline.object=gc_c,
+      test.subject="locus",
+      ggcline.pooled=FALSE)
+    
+    aic_no_fixed=calc_AIC(
+      data.prep.object=prepdata$data.prep,
+      esth.object=hindlabel,
+      ggcline.object=gc,
+      test.subject="locus",
+      ggcline.pooled=FALSE)
+    
+    #Now join the tables and calculate the difference in AIC for each locus.
+    setkey(aic_no_fixed,locus);setkey(aic_c_fixed,locus);
+    aic_both=aic_no_fixed[aic_c_fixed];#The columns named 'i...' refer to the second table, aic_c_fixed
+    aic_both[,aicdiff:=AIC - i.AIC]#Positive values favour the less complex model (v fixed at 1)
+    # Order the results by AIC difference
+    ordered_AIC <- aic_both[order(aicdiff)]
+    # Store the ordered results in the AIC list with a descriptive name
+    AIC_c_fixed[[paste0("AIC_c_fixed_", name)]] <- ordered_AIC
+  }
+}
+
+```
+
+```{r}
+Significant_T1_v <- subset(AIC_v_fixed$AIC_v_fixed_T1, aicdiff < 0)
+Significant_T1_c <- subset(AIC_c_fixed$AIC_c_fixed_T1, aicdiff < 0)
+Significant_T1 <- inner_join(Significant_T1_v,Significant_T1_c, by="locus")
+
+Significant_T2_v <- subset(AIC_v_fixed$AIC_v_fixed_T2, aicdiff < 0)
+Significant_T2_c <- subset(AIC_c_fixed$AIC_c_fixed_T2, aicdiff < 0)
+Significant_T2 <- inner_join(Significant_T2_v,Significant_T2_c, by="locus")
+
+Significant_T3_v <- subset(AIC_v_fixed$AIC_v_fixed_T3, aicdiff < 0)
+Significant_T3_c <- subset(AIC_c_fixed$AIC_c_fixed_T3, aicdiff < 0)
+Significant_T3 <- inner_join(Significant_T3_v,Significant_T3_c, by="locus")
+
+shared_T1T2 <- merge(Significant_T1, Significant_T2,  by = "locus")
+shared_T1T3 <- merge(Significant_T1, Significant_T3, by = "locus")
+shared_T2T3 <- merge(Significant_T2, Significant_T3, by = "locus")
+
+shared_T1T2_v <- merge(Significant_T1_v, Significant_T2_v,  by = "locus")
+shared_T1T3_v <- merge(Significant_T1_v, Significant_T3_v, by = "locus")
+shared_T2T3_v <- merge(Significant_T2_v, Significant_T3_v, by = "locus")
+
+shared_T1T2_c <- merge(Significant_T1_c, Significant_T2_c,  by = "locus")
+shared_T1T3_c <- merge(Significant_T1_c, Significant_T3_c, by = "locus")
+shared_T2T3_c <- merge(Significant_T2_c, Significant_T3_c, by = "locus")
+```
+
+```{r}
+###T1
+T1Significant<-dplyr::select(Significant_T1, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus")
+T1Significant_c<-dplyr::select(Significant_T1_c, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus")
+Significant_T1V<-dplyr::select(Significant_T1_v, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus")
+
+Significant_T1F <-subset(T1Significant, invlogit_mean_logit_centre > 0.5)
+Significant_T1I <-subset(T1Significant, invlogit_mean_logit_centre < 0.5)
+Significant_T1_cF <-subset(T1Significant_c, invlogit_mean_logit_centre > 0.5)
+Significant_T1_cI <-subset(T1Significant_c, invlogit_mean_logit_centre < 0.5)
+Significant_T1_vsmall<-subset(Significant_T1V, exp_mean_log_v < 1)
+Significant_T1_vlarge<-subset(Significant_T1V, exp_mean_log_v > 1)
+#Shared
+T1T2Center <-dplyr::select(shared_T1T2_c, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus") 
+T1T2CF<-subset(T1T2Center, invlogit_mean_logit_centre > 0.5)
+T1T2CI<-subset(T1T2Center, invlogit_mean_logit_centre < 0.5)
+
+T1T3Center <-dplyr::select(shared_T1T3_c, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus")
+T1T3CF<-subset(T1T3Center, invlogit_mean_logit_centre > 0.5)
+T1T3CI<-subset(T1T3Center, invlogit_mean_logit_centre < 0.5)
+
+###T2
+T2Significant<-dplyr::select(Significant_T2, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus")
+T2Significant_c<-dplyr::select(Significant_T2_c, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus")
+Significant_T2V<-dplyr::select(Significant_T2_v, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus")
+
+Significant_T2F <-subset(T2Significant, invlogit_mean_logit_centre > 0.5)
+Significant_T2I <-subset(T2Significant, invlogit_mean_logit_centre < 0.5)
+Significant_T2_cF <-subset(T2Significant_c, invlogit_mean_logit_centre > 0.5)
+Significant_T2_cI <-subset(T2Significant_c, invlogit_mean_logit_centre < 0.5)
+Significant_T2_vsmall<-subset(Significant_T2V, exp_mean_log_v < 1)
+Significant_T2_vlarge<-subset(Significant_T2V, exp_mean_log_v > 1)
+#Shared
+T2T1Center<-dplyr::select(shared_T1T2_c, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus")
+T2T1CF<-subset(T2T1Center, invlogit_mean_logit_centre > 0.5)
+T2T1CI<-subset(T2T1Center, invlogit_mean_logit_centre < 0.5)
+
+T2T3Center<-dplyr::select(shared_T2T3_c, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus")
+T2T3CF<-subset(T2T3Center, invlogit_mean_logit_centre > 0.5)
+T2T3CI<-subset(T2T3Center, invlogit_mean_logit_centre < 0.5)
+
+###T3
+T3Significant<-dplyr::select(Significant_T3, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")
+T3Significant_c<-dplyr::select(Significant_T3_c, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")
+Significant_T3V<-dplyr::select(Significant_T3_v, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")
+
+Significant_T3F <-subset(T3Significant, invlogit_mean_logit_centre > 0.5)
+Significant_T3I <-subset(T3Significant, invlogit_mean_logit_centre < 0.5)
+Significant_T3_cF <-subset(T3Significant_c, invlogit_mean_logit_centre > 0.5)
+Significant_T3_cI <-subset(T3Significant_c, invlogit_mean_logit_centre < 0.5)
+Significant_T3_vsmall<-subset(Significant_T3V, exp_mean_log_v < 1)
+Significant_T3_vlarge<-subset(Significant_T3V, exp_mean_log_v > 1)
+#Shared
+T3T1Center<-dplyr::select(shared_T1T3_c, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")
+T3T1CF<-subset(T3T1Center, invlogit_mean_logit_centre > 0.5)
+T3T1CI<-subset(T3T1Center, invlogit_mean_logit_centre < 0.5)
+
+T3T2Center<-dplyr::select(shared_T2T3_c, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")
+T3T2CF<-subset(T3T2Center, invlogit_mean_logit_centre > 0.5)
+T3T2CI<-subset(T3T2Center, invlogit_mean_logit_centre < 0.5)
+
+T1T2v <-dplyr::select(shared_T1T2_v, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus") %>% subset(exp_mean_log_v > 1)
+T1T3v <-dplyr::select(shared_T1T3_v, locus) %>% left_join(gc_results$gc_T1_All$gc, by="locus") %>% subset(exp_mean_log_v > 1)
+T2T1v<-dplyr::select(shared_T1T2_v, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus") %>% subset(exp_mean_log_v > 1)
+T2T3v<-dplyr::select(shared_T2T3_v, locus) %>% left_join(gc_results$gc_T2_All$gc, by="locus") %>% subset(exp_mean_log_v < 1)
+T3T1v<-dplyr::select(shared_T1T3_v, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus") %>% subset(exp_mean_log_v > 1)
+T3T2v<-dplyr::select(shared_T2T3_v, locus) %>% left_join(gc_results$gc_T3_All$gc, by="locus")%>% subset(exp_mean_log_v < 1)
+```
+
+```{r}
+###################################################################################
+#Plot cline curves for multiple loci on the same plot - Change for each transect T*
+###################################################################################
+Fixed<-c("S6_20294912","SZ_62897794")
+loci<-"S22_300695"
+#shared
+sharedT2CF<-T1T2CF$locus
+sharedT2CI<-T1T2CI$locus
+sharedT3CF<-T1T3CF$locus
+sharedT3CI<-T1T3CI$locus
+sharedT1T2V<-T1T2v$locus
+sharedT1T3V<-T1T3v$locus
+lociT1T2<-as.character(c(sharedT2CF,sharedT2CI,sharedT1T2V))
+lociT1T3<-as.character(c(sharedT3CF,sharedT3CI,sharedT1T3V))
+#onlyT1
+#both
+ST1F<-Significant_T1F$locus
+ST1I<-Significant_T1I$locus
+lociT1both<-as.character(c(ST1F,ST1I))
+#only center 
+ST1_cF<-Significant_T1_cF$locus
+ST1_cI<-Significant_T1_cI$locus
+lociT1C<-as.character(c(ST1_cF,ST1_cI))
+#only v
+ST1_vs<-Significant_T1_vsmall$locus
+ST1_vl<-Significant_T1_vlarge$locus
+
+lociT1V<-as.character(c(ST1_vs,ST1_vl))
+
+#original_colors <- c(rep("red", length(sharedT2CF)),
+                     #rep("yellow2", length(sharedT2CI)),
+                     #rep("black",length(sharedT1T2V)))
+
+#original_colors <- c(rep("red", length(sharedT3CF)),
+                     #rep("yellow2", length(sharedT3CI)),
+                     #rep("black",length(sharedT1T3V)))
+
+#original_colors <- c(rep("red", length(ST1F)),
+                     #rep("yellow2", length(ST1I)))
+
+#original_colors <- c(rep("red", length(ST1_cF)),
+                     #rep("yellow2", length(ST1_cI)))
+
+original_colors <- c(rep("black", length(ST1_vs)),rep("blue", length(ST1_vl)))
+
+#BothT1<-Significant_T1$locus
+#CenterT1<-Significant_T1_c$locus
+#VT1<-Significant_T1_v$locus
+#lociT1<-as.character(c(VT1,CenterT1,BothT1))
+
+# Define cline colors and adjust their transparency
+#original_colors <- c(rep("darkcyan", length(VT1)),rep("darkorange", length(CenterT1)),rep("black",length(BothT1)))
+#original_colors<- "black"
+transparent_colors <- sapply(original_colors, adjustcolor, alpha.f = 0.2)
+
+#No data points or uncertainty included this time.
+
+#pdf('./GenomicClines/GC_T1_sharedT2.pdf')
+#pdf('./GenomicClines/GC_T1_sharedT3.pdf')
+#pdf('./GenomicClines/GC_T1_ST1.pdf')
+#pdf('./GenomicClines/GC_T1_ST1C.pdf')
+pdf('./GenomicClines/GC_T1_ST1V.pdf')
+
+plot_clinecurve(
+ggcline.object=gc_results$gc_T1_All$gc,
+cline.locus=lociT1V,
+locus.column="locus",
+cline.col=original_colors,
+#null.line.locus=loci,
+#null.line.col=transparent_colors,
+#cline.centre.line=loci,
+#cline.centre.col=original_colors
+)
+
+#Add a title and axis labels:
+title(xlab="Hybrid index",ylab="Locus allele frequency",cex.main=1.5,cex.lab=1.5)
+
+# Get the cline center values from the gc_results object
+summary <- gc_results$gc_T1_All$gc
+cline_centers <- summary[match(lociT1V, summary$locus), "invlogit_mean_logit_centre"]
+cline_centers <- as.numeric(unlist(cline_centers))
+
+# Add upside-down triangles to the plot at the cline centers
+points(x = cline_centers,y = rep(0.99, length(cline_centers)), pch = 25,col = "black",bg = original_colors, cex = 1.5)
+
+legend("topleft",legend=c("Both", "Center (u)", "Steepnes (v)"), col=c("black", "darkorange","darkcyan"), lty=1, lwd=2,cex=0.8, bg="white",bty="n")
+dev.off()
+```
+
+# To calculate significant outlier SNPS that are within 100Kb windows in all transects. 
+```{r}
+T1100KbCENTER<-dplyr::select(Significant_T1_c, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+T2100KbCENTER<-dplyr::select(Significant_T2_c, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+T3100KbCENTER<-dplyr::select(Significant_T3_c, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+T1100KbV<-dplyr::select(Significant_T1_v, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+T2100KbV<-dplyr::select(Significant_T2_v, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+T3100KbV<-dplyr::select(Significant_T3_v, locus) %>% mutate(locus2=sub("^S","",locus)) %>% separate(locus2, into=c("chr","bp"), sep="_") %>% mutate(bp=as.numeric(bp)) %>% arrange(chr,bp)
+```
+
+```{r}
+# Load required packages
+library(dplyr)
+library(IRanges)
+```
+
+```{r}
+library(dplyr)
+library(IRanges)
+
+# Function to assign windows based on 100,000 bp intervals
+assign_windows <- function(df) {
+  df %>%
+    group_by(chr) %>%
+    arrange(bp) %>%
+    # Initialize window assignment
+    mutate(window = cumsum(c(0, diff(bp) > 100000))) %>%
+    group_by(chr, window) %>%
+    summarise(range_start = min(bp),
+              range_end = max(bp),
+              .groups = 'drop') %>%
+    mutate(window = paste0(range_start, "-", range_end))
+}
+
+# Apply the window assignment function to each data frame for center
+T1_windows <- assign_windows(T1100KbCENTER)
+T2_windows <- assign_windows(T2100KbCENTER)
+T3_windows <- assign_windows(T3100KbCENTER)
+
+# Apply the window assignment function to each data frame for center
+T1_windows_v <- assign_windows(T1100KbV)
+T2_windows_v <- assign_windows(T2100KbV)
+T3_windows_v <- assign_windows(T3100KbV)
+```
+
+```{r}
+df1<-T1100KbCENTER
+df2<-T2100KbCENTER
+df3<-T3100KbCENTER
+
+# Merge dataframes by chromosome
+combinedT1T2 <- merge(df1, df2, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT1T2))
+
+# Check distances
+for (i in 1:nrow(combinedT1T2)) {
+  site_df1 <- combinedT1T2$bp.df1[i]
+  site_df2 <- combinedT1T2$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT1T2$within_threshold <- within_threshold
+
+T1T2<-subset(combinedT1T2, within_threshold==TRUE)
+
+# Merge dataframes by chromosome
+combinedT1T3 <- merge(df1, df3, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT1T3))
+
+# Check distances
+for (i in 1:nrow(combinedT1T3)) {
+  site_df1 <- combinedT1T3$bp.df1[i]
+  site_df2 <- combinedT1T3$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT1T3$within_threshold <- within_threshold
+
+T1T3<-subset(combinedT1T3, within_threshold==TRUE)
+
+# Merge dataframes by chromosome
+combinedT2T3 <- merge(df2, df3, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT2T3))
+
+# Check distances
+for (i in 1:nrow(combinedT2T3)) {
+  site_df1 <- combinedT2T3$bp.df1[i]
+  site_df2 <- combinedT2T3$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT2T3$within_threshold <- within_threshold
+
+T2T3<-subset(combinedT2T3, within_threshold==TRUE)
+```
+
+```{r}
+df1v<-T1100KbV
+df2v<-T2100KbV
+df3v<-T3100KbV
+
+# Merge dataframes by chromosome
+combinedT1T2v <- merge(df1v, df2v, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT1T2v))
+
+# Check distances
+for (i in 1:nrow(combinedT1T2v)) {
+  site_df1 <- combinedT1T2v$bp.df1[i]
+  site_df2 <- combinedT1T2v$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT1T2v$within_threshold <- within_threshold
+
+T1T2_V<-subset(combinedT1T2v, within_threshold==TRUE)
+
+# Merge dataframes by chromosome
+combinedT1T3v <- merge(df1v, df3v, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT1T3v))
+
+# Check distances
+for (i in 1:nrow(combinedT1T3v)) {
+  site_df1 <- combinedT1T3v$bp.df1[i]
+  site_df2 <- combinedT1T3v$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT1T3v$within_threshold <- within_threshold
+
+T1T3_V<-subset(combinedT1T3v, within_threshold==TRUE)
+
+# Merge dataframes by chromosome
+combinedT2T3v <- merge(df2v, df3v, by = "chr", suffixes = c(".df1", ".df2"))
+
+# Initialize a vector to store the results
+within_threshold <- logical(nrow(combinedT2T3v))
+
+# Check distances
+for (i in 1:nrow(combinedT2T3v)) {
+  site_df1 <- combinedT2T3v$bp.df1[i]
+  site_df2 <- combinedT2T3v$bp.df2[i]
+  
+  # Compute distances
+  distance <- abs(site_df1 - site_df2)
+  
+  # Check if distance is within 100,000 bp
+  within_threshold[i] <- distance <= 100000
+}
+
+# Add the result to the combined dataframe
+combinedT2T3v$within_threshold <- within_threshold
+
+T2T3_V<-subset(combinedT2T3v, within_threshold==TRUE)
+```
+
+```{r}
+############################################################################################################
+#Plot cline curves for multiple loci on the same plot with the results of the only loci within 100kb windows
+############################################################################################################
+
+t1c<-subset(gc_results$gc_T1_All$gc, locus=="S22_300695")
+t2c<-subset(gc_results$gc_T2_All$gc, locus=="S22_271593")
+t3c<-subset(gc_results$gc_T3_All$gc, locus=="S22_266539")
+
+locitable<-rbind(t1c,t2c,t3c)
+loci<-c("S22_300695","S22_271593","S22_266539")                
+
+original_colors<- c("black","darkcyan","red")
+
+transparent_colors <- sapply(original_colors, adjustcolor, alpha.f = 0.2)
+
+#No data points or uncertainty included this time.
+pdf('./GenomicClines/GC_sharedwindowT1T2T3.pdf')
+
+
+plot_clinecurve(
+ggcline.object=locitable,
+cline.locus=loci,
+locus.column="locus",
+cline.col=original_colors,
+null.line.locus=loci,
+null.line.col=transparent_colors,
+cline.centre.line=loci,
+cline.centre.col=original_colors
+)
+
+#Add a title and axis labels:
+title(xlab="Hybrid index",ylab="Locus allele frequency",cex.main=1.5,cex.lab=1.5)
+
+legend("topleft",legend=c("T1", "T2", "T3"), col=c("black", "darkcyan","red"), lty=1, lwd=2,cex=0.8, bg="white",bty="n")
+dev.off()
+```
+
+#Save all data frames 
+```{r}
+T1Center<- dplyr::select(T1T2, locus.df1) %>% left_join(gc_results$gc_T1_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T1, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T2Center<- dplyr::select(T1T2, locus.df2) %>% left_join(gc_results$gc_T2_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T2, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T1Steepness<- dplyr::select(T1T2_V, locus.df1) %>% left_join(gc_results$gc_T1_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T1, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T2Steepness<- dplyr::select(T1T2_V, locus.df2) %>% left_join(gc_results$gc_T2_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T2, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+colnames(T1Center)<-c("LocusT1","Pict_T1","Pfla_T1","v_T1","u_T1","AICdiff_T1")
+colnames(T2Center)<-c("LocusT2","Pict_T2","Pfla_T2","v_T2","u_T2","AICdiff_T2")
+T1T2Center<-bind_cols(T1Center,T2Center,T1T2) %>% dplyr::select(chr, bp.df1,LocusT1,Pict_T1,Pfla_T1,v_T1,u_T1,AICdiff_T1,bp.df2,LocusT2,Pict_T2,Pfla_T2,v_T2,u_T2,AICdiff_T2)
+colnames(T1Steepness)<-c("LocusT1","Pict_T1","Pfla_T1","v_T1","u_T1","AICdiff_T1")
+colnames(T2Steepness)<-c("LocusT2","Pict_T2","Pfla_T2","v_T2","u_T2","AICdiff_T2")
+T1T2Steepness<-bind_cols(T1Steepness,T2Steepness, T1T2_V) %>% dplyr::select(chr, bp.df1,LocusT1,Pict_T1,Pfla_T1,v_T1,u_T1,AICdiff_T1,bp.df2,LocusT2,Pict_T2,Pfla_T2,v_T2,u_T2,AICdiff_T2)
+Overlap_CV_T1T2 <- rbind(T1T2Center, T1T2Steepness)
+```
+
+```{r}
+T1Centerb<- dplyr::select(T1T3, locus.df1) %>% left_join(gc_results$gc_T1_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T1, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T3Center<- dplyr::select(T1T3, locus.df2) %>% left_join(gc_results$gc_T3_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T3, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T1Steepnessb<- dplyr::select(T1T3_V, locus.df1) %>% left_join(gc_results$gc_T1_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T1, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T3Steepness<- dplyr::select(T1T3_V, locus.df2) %>% left_join(gc_results$gc_T3_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T3, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+colnames(T1Centerb)<-c("LocusT1","Pict_T1","Pfla_T1","v_T1","u_T1","AICdiff_T1")
+colnames(T3Center)<-c("LocusT3","Pict_T3","Pfla_T3","v_T3","u_T3","AICdiff_T3")
+T1T3Center<-bind_cols(T1Centerb,T3Center,T1T3) %>% dplyr::select(chr, bp.df1,LocusT1,Pict_T1,Pfla_T1,v_T1,u_T1,AICdiff_T1,bp.df2,LocusT3,Pict_T3,Pfla_T3,v_T3,u_T3,AICdiff_T3)
+colnames(T1Steepnessb)<-c("LocusT1","Pict_T1","Pfla_T1","v_T1","u_T1","AICdiff_T1")
+colnames(T3Steepness)<-c("LocusT3","Pict_T3","Pfla_T3","v_T3","u_T3","AICdiff_T3")
+T1T3Steepness<-bind_cols(T1Steepnessb,T3Steepness, T1T3_V) %>% dplyr::select(chr, bp.df1,LocusT1,Pict_T1,Pfla_T1,v_T1,u_T1,AICdiff_T1,bp.df2,LocusT3,Pict_T3,Pfla_T3,v_T3,u_T3,AICdiff_T3)
+Overlap_CV_T1T3 <- rbind(T1T3Center, T1T3Steepness)
+```
+```{r}
+T2Centerb<- dplyr::select(T2T3, locus.df1) %>% left_join(gc_results$gc_T2_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T2, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T3Centerb<- dplyr::select(T2T3, locus.df2) %>% left_join(gc_results$gc_T3_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_c_fixed$AIC_c_fixed_T3, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T2Steepnessb<- dplyr::select(T2T3_V, locus.df1) %>% left_join(gc_results$gc_T2_All$gc, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T2, by=join_by(locus.df1 == locus)) %>% dplyr::select(locus.df1,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+T3Steepnessb<- dplyr::select(T2T3_V, locus.df2) %>% left_join(gc_results$gc_T3_All$gc, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre) %>% left_join(AIC_v_fixed$AIC_v_fixed_T3, by=join_by(locus.df2 == locus)) %>% dplyr::select(locus.df2,S0.prop_1,S1.prop_1,exp_mean_log_v, invlogit_mean_logit_centre, aicdiff)
+colnames(T2Centerb)<-c("LocusT2","Pict_T2","Pfla_T2","v_T2","u_T2","AICdiff_T2")
+colnames(T3Centerb)<-c("LocusT3","Pict_T3","Pfla_T3","v_T3","u_T3","AICdiff_T3")
+T2T3Center<-bind_cols(T2Centerb,T3Centerb,T2T3) %>% dplyr::select(chr, bp.df1,LocusT2,Pict_T2,Pfla_T2,v_T2,u_T2,AICdiff_T2,bp.df2,LocusT3,Pict_T3,Pfla_T3,v_T3,u_T3,AICdiff_T3)
+colnames(T2Steepnessb)<-c("LocusT2","Pict_T2","Pfla_T2","v_T2","u_T2","AICdiff_T2")
+colnames(T3Steepnessb)<-c("LocusT3","Pict_T3","Pfla_T3","v_T3","u_T3","AICdiff_T3")
+T2T3Steepness<-bind_cols(T2Steepnessb,T3Steepnessb, T2T3_V) %>% dplyr::select(chr, bp.df1,LocusT2,Pict_T2,Pfla_T2,v_T2,u_T2,AICdiff_T2,bp.df2,LocusT3,Pict_T3,Pfla_T3,v_T3,u_T3,AICdiff_T3)
+Overlap_CV_T2T3 <- rbind(T2T3Center, T2T3Steepness)
+```
+
+```{r}
+write_delim(Overlap_CV_T1T2, "./GenomicClines/FILTERED/Overlap_CV_T1T2.txt")
+write_delim(Overlap_CV_T1T3, "./GenomicClines/FILTERED/Overlap_CV_T1T3.txt")
+write_delim(Overlap_CV_T2T3, "./GenomicClines/FILTERED/Overlap_CV_T2T3.txt")
+```
+### MANHATTAN PLOTS FOR SUPPLEMENTARY FIGURES
+```{r}
+df<-T1Significant_c
+# Add a column indicating if points are in table2
+table1 <- gc_cl %>%
+  mutate(color = ifelse(
+    locus %in% table2$locus,
+    ifelse(invlogit_mean_logit_centre > 0.5, "red", "yellow"),
+    "gray"
+  ))
+
+# Create the plot
+ggplot(table1, aes(x = locus, y = invlogit_mean_logit_centre, color = color)) +
+  geom_point(size = 2) +  # Plot points with conditional color
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "black") +  # Reference line at 0.5
+  scale_color_identity() +  # Use colors as defined
+  theme_minimal() +  # Minimal theme for clean aesthetics
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1)  # Rotate x-axis labels if needed
+  ) +
+  labs(
+    x = "Locus",
+    y = "Center (invlogit_mean_logit_centre)",
+  )
+```
