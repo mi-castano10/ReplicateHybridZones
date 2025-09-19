@@ -43,6 +43,7 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 - [EasySFS](https://github.com/isaacovercast/easySFS)
 - [HZAR (R package)](https://cran.r-project.org/package=hzar)
 - [gghybrid (R package)](https://github.com/ribailey/gghybrid)
+- [PGDspider](https://software.bioinformatics.unibe.ch/pgdspider/)
 - [GEMMA](https://github.com/genetics-statistics/GEMMA)
 - [BEAGLE](https://faculty.washington.edu/browning/beagle/beagle.html)
 
@@ -444,22 +445,26 @@ module load java
 java -cp stairway_plot_es Stairbuilder two-epoch_fold_FT1.blueprint 
 bash two-epoch_fold_FT1.blueprint.sh
 ```
-### 7. Geographic clines
+### 7. Geographic clines - in R. 
 To estimate geographic clines we used the R package *Hzar*. 
 - [x] Step 1: Create morphological and molecular data tables to run the cline analysis. 
-
-- [x] Step 2: Modify the scripts `Hzar_Molecular_Ramphocelus.R` and Hzar `Hzar_Morphological_Ramphocelus.R` (in the scripts folder) with the correct paths to the tables that contain allele or trait frequencies of the traits of interest. Also modify the path to save the R.Data object with the results for plotting later on. 
-    
-- [x] Step 3: Send a bash script to have more memory for faster running. (can take a very long time if running locally/for many traits).
+- [x] Step 2: Modify the scripts `Hzar_Molecular_Ramphocelus.R` and Hzar `Hzar_Morphological_Ramphocelus.R` (in the scripts folder) with the correct paths to the tables that contain allele or trait frequencies of the molecular markers or phenotypic traits of interest. Also modify the path to save the R.Data object with the results for plotting later on. 
+- [x] Step 3: Send a bash script to have more memory for faster running. (Since I did 3 runs of every model (*15 models) this can take a very long time if running locally/for many traits).
 ```
 module load Rstudio
 Rscript ./Hzar_Molecular_Ramphocelus.R
 ```
-- [x] Step 4: In R read in the rampho_MT2 and rampho_morpho_MT2 RData objects product of the Hzar runs and follow the script `plot_clines.R` in the scripts folder for plotting
+- [x] Step 4: In R read in the rampho_MT* and rampho_morpho_MT* RData objects product of the Hzar runs in the previous and follow the script `plot_clines.R` in the scripts folder for AIC model selection and plotting.
 
-### 8. Genomic clines
+### 8. Genomic clines - in R. 
+- [x] Step 1: Use [PGDspider](https://software.bioinformatics.unibe.ch/pgdspider/) to convert the VCF file to STRUCTURE format for each transect.
+> In the SPID conversion file I gave it a list of individuals to assign to populations based on hybrid index (Icteronotus Q<0.01, Hybrid or Flammigerus Q>0.99).
+- [x] Step 2: Use the R script `GenoToGGhybrid.Rmd` in the scripts folder to prepare the .geno file (output from step1) into the format required by *gghybrid*.
+- [x] Step 3: Follow the R script `gghybrid_Ramphocelus.Rmd` to estimate hybrid index, genomic clines and test for significance. This script is a modified version of the scripts included in the with the R package in the [gghybrid (R package)](https://github.com/ribailey/gghybrid) github to loop through multiple datasets (three transects).
+> This script also includes 100Kb overlap calculation and plotting of genomic clines. 
+      
 ### 9. GWAS
-We used [GEMMA](https://github.com/genetics-statistics/GEMMA) to do a Genome Wide Association Study for rump color hue
+We used [GEMMA](https://github.com/genetics-statistics/GEMMA) to do a Genome Wide Association Study for rump color hue (H4)
 - [x] Step 1: Use Dataset B (no minor allele frequency filter) to impute missing data with [BEAGLE](https://faculty.washington.edu/browning/beagle/beagle.html)
 ```
 VCF=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf
