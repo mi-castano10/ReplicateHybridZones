@@ -1,0 +1,80 @@
+---
+title: "GenoToGGhybrid"
+author: Maria I. Castano
+---
+
+### TO PREPARE YOUR FILE FOR GGHYBRID - IT NEEDS TO BE IN STRUCTURE FORMAT
+```{r}
+# Read the file generated using PGD spider (genotype data). In the PGDSpider GUI opened in bluehive through the command line I converted from VCF to STRUCTURE. IN THE SPID conversion file I gave it a list of individuals to assign to populations. (one INDLABEL POPID per row). 
+
+# I added INDLABEL POPID as the two first column names of the .geno file manually
+data_T1 <- read.table("./GenomicClines/T1/T1.geno", h=T)
+data_T1[data_T1 == -9]<-NA
+data_T1 <- data_T1 %>%
+  mutate(POPID = case_when(
+    POPID == 1 ~ "icteronotus",
+    POPID == 2 ~ "hybrid",
+    POPID == 3 ~ "flammigerus",
+    POPID == 4 ~ "hybrid", #(It will assign a 4 if you have individuals missing from your text file)
+    TRUE ~ as.character(POPID)  # Keep original value if none of the conditions are met
+  ))
+data_T1 <- data_T1 %>%
+  mutate_at(vars(-INDLABEL, -POPID), ~ case_when(
+    . == 1 ~ "A",
+    . == 2 ~ "T",
+    . == 3 ~ "G",
+    . == 4 ~ "C",
+    TRUE ~ as.character(.)
+  ))
+
+#The data file contains two mandatory columns to the left of the marker columns, named
+#INDLABEL (the individual references) and POPID (the sample population). These columns
+#don't need to be named in the header row (or could have different names), but it makes it easier if they are
+write.csv(data_T1, "./GenomicClines/T1/StructureData_T1.csv", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+#### TRANSECT 2 ####
+
+data_T2 <- read.table("./GenomicClines/T2/T2.geno", h=T)
+data_T2[data_T2 == -9]<-NA
+data_T2 <- data_T2 %>%
+  mutate(POPID = case_when(
+    POPID == 1 ~ "icteronotus",
+    POPID == 2 ~ "hybrid",
+    POPID == 3 ~ "flammigerus",
+    POPID == 4 ~ "hybrid", #(It will assign a 4 if you have individuals missing from your text file)
+    TRUE ~ as.character(POPID)  # Keep original value if none of the conditions are met
+  ))
+data_T2 <- data_T2 %>%
+  mutate_at(vars(-INDLABEL, -POPID), ~ case_when(
+    . == 1 ~ "A",
+    . == 2 ~ "T",
+    . == 3 ~ "G",
+    . == 4 ~ "C",
+    TRUE ~ as.character(.)
+  ))
+
+write.csv(data_T2, "./GenomicClines/T2/StructureData_T2.csv", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+#### TRANSECT 3 ####
+
+data_T3 <- read.table("./GenomicClines/T3/T3.geno", h=T)
+data_T3[data_T3 == -9]<-NA
+data_T3 <- data_T3 %>%
+  mutate(POPID = case_when(
+    POPID == 1 ~ "icteronotus",
+    POPID == 2 ~ "hybrid",
+    POPID == 3 ~ "flammigerus",
+    POPID == 4 ~ "hybrid", #(It will assign a 4 if you have individuals missing from your text file)
+    TRUE ~ as.character(POPID)  # Keep original value if none of the conditions are met
+  ))
+data_T3 <- data_T3 %>%
+  mutate_at(vars(-INDLABEL, -POPID), ~ case_when(
+    . == 1 ~ "A",
+    . == 2 ~ "T",
+    . == 3 ~ "G",
+    . == 4 ~ "C",
+    TRUE ~ as.character(.)
+  ))
+
+write.csv(data_T3, "./GenomicClines/T3/StructureData_T3.csv", row.names = FALSE, col.names = TRUE, quote = FALSE)
+```
