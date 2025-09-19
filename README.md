@@ -36,7 +36,9 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 
 - [PLINK](https://www.cog-genomics.org/plink/)
 - [EEMS](https://github.com/dipetkov/eems)
+- [ADMIXTURE](https://github.com/NovembreLab/admixture)
 - [RStudio](https://posit.co/products/open-source/rstudio/)
+- [Introgress](https://CRAN.R-project.org/package=introgress)
 - [PopSizeABC](https://forge-dga.jouy.inra.fr/projects/popsizeabc/)
 - [StairwayPlot2](https://github.com/xiaoming-liu/stairway-plot-v2)
 - [FastSIMCOAL2](http://cmpg.unibe.ch/software/fastsimcoal2/)
@@ -57,6 +59,8 @@ Overview of the code used in Castaño et al. (2025) to characterize and compare 
 
 #### 1. Count k-mers in HiFi reads to build a k-mer database with Meryl
 ```
+module load meryl
+
 cd /path/to/raw/reads
 meryl count k=21 output R1_RFI301_meryldb m64086e_230626_160908.hifi_reads.fasta.gz
 meryl count k=21 output R2_RFI301_meryldb m64086e_230706_190935.hifi_reads.fasta.gz
@@ -68,6 +72,7 @@ meryl histogram RFI301_meryldb > RFI301_merylhisto.txt
 Upload the Meryl histogram "RFI301_merylhisto.txt" to the online version of [GenomeScope2](http://genomescope.org/genomescope2.0/) to run the model and plot. 
 #### 3. Assemble the genome using Hifiasm and convert gfa output to fasta 
 ```
+module load hifiasm gcc zlib
 hifiasm -o ./RFI301_Hifiasm_v1.asm -t 12 --primary m64086e_230626_160908.hifi_reads.fastq.gz m64086e_230706_190935.hifi_reads.fastq.gz m64190e_230621_195312.hifi_reads.fastq.gz 
 awk '/^S/{print ">"$2"\n"$3}'  RFI301_Hifiasm_v1.asm.p_ctg.gfa | fold >  RFI301_v1.asm.p.fa
 awk '/^S/{print ">"$2"\n"$3}'  RFI301_Hifiasm_v1.asm.a_ctg.gfa | fold >  RFI301_v1.asm.a.fa
@@ -75,10 +80,12 @@ awk '/^S/{print ">"$2"\n"$3}'  RFI301_Hifiasm_v1.asm.a_ctg.gfa | fold >  RFI301_
 #### 4. Evaluate raw assembly quality, completeness and contiguity.
  > Visualize assembly quality and contiguity using [QUAST](https://github.com/ablab/quast) which gives summary statistics and plots. 
 ```
+module load quast
 quast.py RFI301_v1.asm.p.fa RFI301_v1.asm.a.fa -o Quast
 ```
  > Evaluate genome completeness with BUSCO and the passeriformes_odb10 database
 ```
+module load busco
 busco -i RFI301_v1.asm.p.fa -o Primary -l passeriformes_odb10 -m genome -c 12 -f
 busco -i RFI301_v1.asm.a.fa -o Alternate -l passeriformes_odb10 -m genome -c 12 -f
 ```
@@ -125,24 +132,29 @@ python ${MITOHIFIPATH}/src/mitohifi.py -r ${READS} -f ${MITOGENOME}.fasta -g ${M
 #### 8. Align reads or contigs to the purged primary assembly using Minimap2 for downstream analyses and to visualize coverage patterns
 > used the concatenated reads for minimap2 and then samtools to sort and index the bam file
 ```
+module load minimap2 samtools/1.7
 minimap2 -ax asm20 -t 12 RFI301_v1.asm.p_purged.fa RFI301.hifi_reads.fasta.gz | samtools sort -o aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam -T reads.tmp
-
 samtools index aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam
 ```
 #### 9. Visualize mapping quality and coverage using Qualimap
 > Allocated 120G of memory but used 115G as the max in Java memsize (to prevent java mem errors).  
 ```
+module load qualimap
 qualimap bamqc -bam aln_hifi_reads_to_RFI301_v1.asm.p_purged.sorted.bam -c -sd -nw 400 -hm 3 -outdir Qualimap --java-mem-size=115G
 ```
 #### 10. Perform sequence similarity searches using BLAST against reference databases for contamination screening
 > This step needs a lot of memory, or it will fail so plan accordingly (>300G)
 ```
+module load blast
 export BLASTDB=/software/blast/2.10.0+/blastdb
-
 blastn -query RFI301_v1.asm.p_purged.fa -db /software/blast/2.10.0+/blastdb/nt -outfmt '6 qseqid staxids bitscore std' -max_target_seqs 1 -max_hsps 1 -num_threads 12 -evalue 1e-25 > RFI301_v1.asm.p_purged.tsv
 ```
 #### 11. Visualize and evaluate genome assembly quality and contamination with BlobToolKit
 > I followed the instructions to install [blobtoolkit](https://blobtoolkit.genomehubs.org/install/) (NOT BLOBTOOLS2)
+```
+conda create -y -n btk -c conda-forge python=3.9
+conda activate btk
+```
 - [x] Step 1: create a BlobDir (name at the end of the command)
 ```
 blobtools create --fasta /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.fa RFI301_v1
@@ -185,6 +197,7 @@ cat /path/to/your/purged/assembly/RFI301_v1.asm.p_purged.scaffolded.fa /path/to/
 ### Genome annotation
 #### 1.Build a de novo repeat database with RepeatModeler
 ```
+module load repeatmodeler/2.0.1
 # Define paths
 FASTA=/path/to/your/final/assembly/UROC_RaFlam.v1_Scaffolded.fasta
 OUTDIR=/path/to/your/wd/RepeatModeler/01_repeatModeler-denovo-repeat-contig-complete.lib
@@ -252,11 +265,11 @@ The script `SNP_stats.sh` inside the scripts folder will calculate the statistic
 1. Remove all the individuals with low depth (this will also remove the blank).
 > Field 3 in the .idepth file is the depth per individual.  
 ```
+module load vcftools
 awk -F'\t' '$3 <= 1.3 {print $1}' 'SNP_Stats.idepth' > LowDepth.txt
 vcftools --vcf RaFlam.v1_AllSamples.vcf --remove LowDepth.txt --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth 
 ```
 2. Filter for site depth (remove very low depth or very high due to paralogs or repetitive content), no indels and only biallelic SNPs 
-
 ```
 vcftools --vcf RaFlam.v1_AllSamples_iDepth.recode.vcf --remove-indels --min-alleles 2 --max-alleles 2 --minDP 4 --min-meanDP 4 --max-meanDP 30 --maxDP 30 --recode --recode-INFO-all --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic
 ```
@@ -311,10 +324,107 @@ vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_Only
 ```
 ---
 ## Population genetics analysis 
-### 1. Convert file to PLINK and run PCA 
+### 1. PCA
+- [x] Step 1: Convert LD prunned VCF file (Dataset C) to PLINK format 
+```
+VCF=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned.recode.vcf
+module load plink/1.9
+plink --vcf $VCF --make-bed --allow-extra-chr --chr-set 80 --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned
+```
+- [x] Step 2: calculate a principal components analysis with PLINK. 
+> This produces *.eigenval and *.eigenvec files 
+```
+plink -bfile RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned --pca --allow-extra-chr --chr-set 80 --out RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned 
+```
+Follow the [Speciation Genomics github](https://speciationgenomics.github.io/pca/) for plotting
 ### 2. ADMIXTURE
+We estimated ADMIXTURE proportions for samples in all localities (including Panama and Ecuador) and for each transect separately. For the commands below just change the VCF file to the Transect specific VCF and convert to PLINK as shown above.
+- [x] Step 1: Exchange the first column of the .bim file for 0 (ADMIXTURE does not accept chromosome names that are not human chromosomes). If you don't want the original file overwritten make a copy or rename. 
+```
+BFILE=RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned
+awk '{$1=0;print $0}' ${BFILE}.bim > ${BFILE}.tmp
+mv ${BFILE}.tmp ${BFILE}.bim
+```
+- [x] Step 2: Run ADMIXTURE
+```
+module load admixture
+for i in {1..5}; do admixture --cv=10 -B -C 100 -j5 ${BFILE}.bed $i > log${i}.out; done
+```
+- [x] Step 3: Extract the cross validation values to select the most probable value of K (lowest CV value)
+```
+awk '/CV/ {print $3,$4}' *out | cut -c 4,7-20 > cv.error
+```
 ### 3. EEMS
+Follow the [EEMS](https://github.com/dipetkov/eems) documentation for installation.
+- [x] Step 1: Compute genetic dissimilarities with bed2diffs
+> Use the same .bim file as for ADMIXTURE as EEMS also has problems with chromosome names. 
+```
+/gpfs/fs1/home/mcastano/Software/eems/bed2diffs/src-wout-openmp/bed2diffs_v1 --bfile $BFILE 
+#This step outputs a .count .diffs and .order files
+```
+- [x] Step 2: Prepare the $BFILE.coord and $BFILE.outer files in R and put them in the same location as the $BFILE (they have to have the same name = $BFILE)
+> read the .order file and a file with the coordinates of all the samples (this file has to have the sampleID Lat Long).
+```
+library(tidyverse)
+order<-read.table("./RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned.order",header=FALSE)
+samplecoords<-read.table("./SampleCoordinates.txt, header=FALSE)
+colnames(order)<-c("FIID","SampleID")
+colnames(samplecoords)<-c("SampleID","Lat","Long")
+coords<-left_join(order, samplecoords, by="SampleID")
+coords<-coords[,-1] # EEMS needs a coords file that just has the coordinates without the sample name in the same order (one per row) as the .order file 
+write_delim(coords, file="./RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1_maf0.05_Thinned.coord", col.names=FALSE)
+```
+> Use [latlong.net](https://www.latlong.net/) or [kenee unversity maps tool](https://www.keene.edu/campus/maps/tool/) to generate a list of vertices to define the outer perimeter of the dataset. Needs to be counterclockwise, with first vertes the same as the last so it's a closed ring. This file should be saved as $BFILE.outer with coordinates for the outer perimeter.
+
+At this point you should have the input files for SNP data to run EEMS:
+- $BFILE.diffs: the matrix of average pairwise genetic differences (computed with the program bed2diffs)
+- $BFILE.coord: the sample coordinates (two coordinates per sample, one sample per line)
+- $BFILE.outer: the habitat coordinates (as a sequence of vertices that outline a closed polygon)
+- [x] Step 3: Make the configuration file
+> This file specifies the required input arguments: the path to the input data (datapath), the path to the output data (mcmcpath), the number of samples (nIndiv), the number of markers (nSites), the density of the population grid (nDemes), is the species diploid or haploid (diploid), the number of MCMC and burn-in iterations (numMCMCIter, numBurnIter), and the thinning interval (numThinIter).
+```
+#Example of my config file for nDemes=200 named "parameters_eems_200D_2mcmc.txt"
+datapath = ./EEMS/$BFILE
+mcmcpath = ./EEMS/200D/
+nIndiv = 196
+nSites = 14123
+nDemes = 200
+diploid = true
+numMCMCIter = 2000000
+numBurnIter = 1000000
+numThinIter = 9999
+```
+- [x] Step 4: Run EEMS multiple times with different seeds
+```
+module load python eems/b1
+/home/mcastano/Software/eems/runeems_snps/src/runeems_snps --params ./parameters_eems_200D_2mcmc.txt --seed 123
+```
+- [x] Step 5: generate graphs in R following [EEMS](https://github.com/dipetkov/eems) documentation
 ### 4. Fst - Introgress
+To run introgress and make triangle plots you need to first identify informative SNPs (SNPs Fixed or F*st*>0.9 between subspecies). Repeat the following steps with datasets from all transects combined and for each transect separately. 
+- [x] Step 1: Use VCFTOOLS to calculate Fst between pure parental allopatric individuals. (This will produce the *.weir.fst files to do a Manhattan plot of Fst and the Fst heatmap between transects/localities)
+> Pure Allopatric Individual files (popfiles) were produces based on ADMIXTURE results (0.01 < Q and Q > 0.99) and sampling localities. 
+```
+#change the name of the population files depending on the comparison you want to make
+module load vcftools
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --weir-fst-pop All_Pure_Flam --weir-fst-pop All_Pure_Ict --out All_Flam_All_Ict
+```
+- [x] Step 2: In R Explore Fst estimates for all comparisons (all vs all or for each transect independently) and subset the SNPs with Fst > 0.9 or Fixed.  
+```
+library(tidyverse)
+All_Flam_All_Ict <- read.table("./All_Flam_All_Ict.weir.fst", header=TRUE)
+All_Flam_All_Ict_Fst0.9 <- All_Flam_All_Ict %>% filter(WEIR_AND_COCKERHAM_FST >= 0.9) %>% dplyr::select(CHROM,POS)
+All_Flam_All_Ict_Fixed <- All_Flam_All_Ict %>% filter(WEIR_AND_COCKERHAM_FST == 1) %>% dplyr::select(CHROM,POS)
+write_delim(All_Flam_All_Ict_Fst0.9, file="./All_Flam_All_Ict_Fst0.9.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)
+write_delim(All_Flam_All_Ict_Fixed, file="./All_Flam_All_Ict_Fixed.txt", col.names=FALSE, row.names=FALSE, quote=FALSE)
+```
+- [x] Step 3: Subset original VCF file to only the Fixed or highly differentiated SNPs (Fst > 0.9) and only for individuals in each population file (All_Pure_Ict, All_Pure_Flam or All_Admixed). Do the following for each transect independently (T*_Pure_Ict, T*_Pure_Flam, T*_Admixed) and for the fixed sites as well (--positions All_Flam_All_Ict_Fixed.txt).
+```
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --positions All_Flam_All_Ict_Fst0.9.txt --keep All_Pure_Flam --out All_Pure_Flam_diagSNPs_Fst0.9
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --positions All_Flam_All_Ict_Fst0.9.txt --keep All_Pure_Ict --out All_Pure_Ict_diagSNPs_Fst0.9
+vcftools --vcf RaFlam.v1_AllSamples_iDepth_sDepth_indels_Biallelic_Miss0.75_OnlyFlam_mac1.recode.vcf --positions All_Flam_All_Ict_Fst0.9.txt --keep All_Admixed --out All_Admixed_diagSNPs_Fst0.9
+```
+- [x] Step 4: Follow the R script `Ramphocelus_Triangle_Introgress.Rmd` to run [Introgress](https://CRAN.R-project.org/package=introgress), calculate hybrid index and interspecific heterozigosity using the diagnostic SNPS and plot triangle plots based on rump color hue or locality. 
 ### 5. Environmental data & isoclines
 ### 6. Demographic analysis 
 #### PopsizeABC
